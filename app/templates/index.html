@@ -1,0 +1,282 @@
+{% extends "base.html" %}
+{% block title %}CHIMERA — Persona Creation Engine{% endblock %}
+{% block content %}
+
+<!-- Hero -->
+<section class="hero">
+  <div class="container">
+    <h1 class="hero-headline">Build Someone Worth Remembering.</h1>
+    <p class="hero-subtitle">CHIMERA is the Persona Creation Engine behind ARCHE. Create assistants, companions, mentors, storytellers — then forge them into portable Persona Cartridges that work across models.</p>
+    <div class="hero-actions">
+      <a href="/interview" class="btn btn-primary">Create a Persona</a>
+      <a href="/how-it-works" class="btn btn-secondary">See How It Works</a>
+    </div>
+  </div>
+</section>
+
+<!-- Section 1: What is CHIMERA -->
+<section class="section" id="what">
+  <div class="container">
+    <h2>What is CHIMERA?</h2>
+    <p class="section-intro">Traditional AI gives you prompts. CHIMERA gives you personalities. Instead of writing hundreds of lines of instructions, CHIMERA conducts a conversation to understand who your character should become. The result is a reusable Persona Cartridge that can travel between AI models.</p>
+    <div class="card-grid">
+      <div class="card">
+        <h3>Interview</h3>
+        <p>Discover a persona through conversation.</p>
+      </div>
+      <div class="card">
+        <h3>Templates</h3>
+        <p>Start with proven foundations.</p>
+      </div>
+      <div class="card">
+        <h3>Source Material</h3>
+        <p>Bring existing lore, stories, RP profiles, prompt files, or character definitions. CHIMERA discovers the missing pieces.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 2: It Isn't A Questionnaire -->
+<section class="section section-alt" id="approach">
+  <div class="container">
+    <h2>It Isn't A Questionnaire</h2>
+    <p class="section-intro">Every answer changes the next question. CHIMERA investigates. It doesn't interrogate.</p>
+    <div class="comparison">
+      <div class="comparison-col">
+        <div class="comparison-label">Questionnaire</div>
+        <div class="questionnaire-visual">
+          <div class="q-field"><span class="q-box"></span> Question 1</div>
+          <div class="q-field"><span class="q-box"></span> Question 2</div>
+          <div class="q-field"><span class="q-box"></span> Question 3</div>
+          <div class="q-field"><span class="q-box"></span> Submit</div>
+        </div>
+      </div>
+      <div class="comparison-col">
+        <div class="comparison-label chimera-label">CHIMERA</div>
+        <div class="chimera-flow">
+          <div class="cf-step">Question</div>
+          <div class="cf-arrow">&darr;</div>
+          <div class="cf-step">Answer</div>
+          <div class="cf-arrow">&darr;</div>
+          <div class="cf-step">Reasoning</div>
+          <div class="cf-arrow">&darr;</div>
+          <div class="cf-step">Hypothesis</div>
+          <div class="cf-arrow">&darr;</div>
+          <div class="cf-step">Clarification</div>
+          <div class="cf-arrow">&darr;</div>
+          <div class="cf-step">Understanding</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 3: Identity Is Evidence -->
+<section class="section" id="evidence">
+  <div class="container">
+    <h2>Characters leave evidence too.</h2>
+    <p class="section-intro">Every answer becomes evidence. Every clarification refines identity. Every example strengthens understanding. CHIMERA isn't trying to fill out a form. It's trying to understand who this character truly is.</p>
+    <div class="evidence-flow">
+      <div class="ef-item">
+        <span class="ef-label">Evidence</span>
+        <span class="ef-arrow">&darr;</span>
+      </div>
+      <div class="ef-item">
+        <span class="ef-label">Patterns</span>
+        <span class="ef-arrow">&darr;</span>
+      </div>
+      <div class="ef-item">
+        <span class="ef-label">Identity</span>
+        <span class="ef-arrow">&darr;</span>
+      </div>
+      <div class="ef-item">
+        <span class="ef-label ef-final">Persona Cartridge</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 4: Build Your Way -->
+<section class="section section-alt" id="build">
+  <div class="container">
+    <h2>Build Your Way</h2>
+    <div class="build-grid">
+      <div class="build-card">
+        <h3>Templates</h3>
+        <p>Perfect for getting started quickly.</p>
+        <ul class="build-list">
+          <li>Mentor</li>
+          <li>Best Friend</li>
+          <li>Dungeon Master</li>
+          <li>Therapist</li>
+          <li>Teacher</li>
+          <li>Blank</li>
+        </ul>
+      </div>
+      <div class="build-card">
+        <h3>Conversation</h3>
+        <p>Talk with CHIMERA. It asks questions. Challenges assumptions. Learns what you're really trying to build.</p>
+      </div>
+      <div class="build-card">
+        <h3>Source Material</h3>
+        <p>Feed CHIMERA anything.</p>
+        <ul class="build-list">
+          <li>RP sheets</li>
+          <li>Stories</li>
+          <li>Character bios</li>
+          <li>Lore</li>
+          <li>Dialogue</li>
+          <li>Prompt files</li>
+          <li>Notes</li>
+        </ul>
+        <p>CHIMERA discovers what is missing.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 5: Persona Preview -->
+<section class="section" id="preview">
+  <div class="container">
+    <h2>Persona Preview</h2>
+    <p class="section-intro">Before a Persona Cartridge is created, CHIMERA shows you exactly what it believes it has learned. Nothing is hidden.</p>
+    <div class="preview-ui">
+      <div class="preview-header">Persona Preview</div>
+      <div class="preview-body">
+        <div class="preview-row"><span class="preview-key">Summary</span><span class="preview-val preview-placeholder">—</span></div>
+        <div class="preview-row"><span class="preview-key">Communication Style</span><span class="preview-val preview-placeholder">—</span></div>
+        <div class="preview-row"><span class="preview-key">Core Values</span><span class="preview-val preview-placeholder">—</span></div>
+        <div class="preview-row"><span class="preview-key">Motivations</span><span class="preview-val preview-placeholder">—</span></div>
+        <div class="preview-row"><span class="preview-key">Strengths</span><span class="preview-val preview-placeholder">—</span></div>
+        <div class="preview-row"><span class="preview-key">Weaknesses</span><span class="preview-val preview-placeholder">—</span></div>
+        <div class="preview-row"><span class="preview-key">Unknowns</span><span class="preview-val preview-placeholder">—</span></div>
+        <div class="preview-row">
+          <span class="preview-key">Estimated Completeness</span>
+          <span class="preview-val"><span class="completeness-bar"><span class="completeness-fill" style="width: 0%"></span></span> 0%</span>
+        </div>
+        <div class="preview-row"><span class="preview-key">Needs Clarification</span><span class="preview-val preview-placeholder">—</span></div>
+      </div>
+      <div class="preview-actions">
+        <button class="btn btn-secondary" disabled>Continue Interview</button>
+        <button class="btn btn-secondary" disabled>Edit Summary</button>
+        <button class="btn btn-primary" disabled>Forge Persona Cartridge</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 6: Persona Cartridges -->
+<section class="section section-alt" id="cartridges">
+  <div class="container">
+    <h2>Persona Cartridges</h2>
+    <p class="section-intro">Portable. Reusable. Model independent.</p>
+    <div class="cartridge-specs">
+      <div class="spec-item">identity</div>
+      <div class="spec-item">communication style</div>
+      <div class="spec-item">values</div>
+      <div class="spec-item">goals</div>
+      <div class="spec-item">boundaries</div>
+      <div class="spec-item">preferences</div>
+      <div class="spec-item">behavioral rules</div>
+    </div>
+  </div>
+</section>
+
+<!-- Section 7: Powered by ARCHE -->
+<section class="section" id="arche">
+  <div class="container">
+    <h2>Powered by ARCHE</h2>
+    <div class="arche-diagram">
+      <div class="arch-node">User</div>
+      <div class="arch-arrow">&darr;</div>
+      <div class="arch-node">CHIMERA</div>
+      <div class="arch-arrow">&darr;</div>
+      <div class="arch-node arch-em">Persona Cartridge</div>
+      <div class="arch-arrow">&darr;</div>
+      <div class="arch-node">ARCHE Runtime</div>
+      <div class="arch-arrow">&darr;</div>
+      <div class="arch-models">
+        <span class="arch-model">Gemini</span>
+        <span class="arch-model">Claude</span>
+        <span class="arch-model">GPT</span>
+        <span class="arch-model">Mistral</span>
+        <span class="arch-model">Qwen</span>
+      </div>
+    </div>
+    <p class="section-intro arche-tagline">Keep your character. Change your model.</p>
+  </div>
+</section>
+
+<!-- Section 8: Built For -->
+<section class="section section-alt" id="built-for">
+  <div class="container">
+    <h2>Built For</h2>
+    <div class="built-grid">
+      <span class="built-tag">Game Studios</span>
+      <span class="built-tag">Customer Support</span>
+      <span class="built-tag">Education</span>
+      <span class="built-tag">Healthcare</span>
+      <span class="built-tag">Storytelling</span>
+      <span class="built-tag">Companion AI</span>
+      <span class="built-tag">Roleplaying</span>
+      <span class="built-tag">Enterprise</span>
+      <span class="built-tag">Research</span>
+      <span class="built-tag">Creators</span>
+    </div>
+  </div>
+</section>
+
+<!-- Section 9: The Future -->
+<section class="section" id="future">
+  <div class="container">
+    <h2>One day, every intelligent system will need an identity.</h2>
+    <p class="section-intro">CHIMERA builds them.</p>
+    <div class="future-copy">
+      <p>SHERLOCK reconstructs evidence. CHIMERA reconstructs identity. Together they create AI that understands both what happened <em>and</em> who someone is.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="section section-alt" id="faq">
+  <div class="container">
+    <h2>FAQ</h2>
+    <div class="faq-list">
+      <div class="faq-item">
+        <h3>What is a Persona Cartridge?</h3>
+        <p>A portable, model-independent package containing identity, communication style, values, goals, boundaries, preferences, and behavioral rules.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Can I edit it later?</h3>
+        <p>Yes. Every cartridge can be revisited and refined.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Does it work with multiple AI models?</h3>
+        <p>Yes. Persona Cartridges are model-independent — use them with Gemini, Claude, GPT, Mistral, Qwen, and more.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Can I import my existing characters?</h3>
+        <p>Absolutely. Feed CHIMERA RP sheets, stories, bios, lore, dialogue, prompt files, or notes. It discovers what's missing.</p>
+      </div>
+      <div class="faq-item">
+        <h3>Does CHIMERA replace my AI model?</h3>
+        <p>No. CHIMERA creates the personality. You still need a runtime — that's what ARCHE provides.</p>
+      </div>
+      <div class="faq-item">
+        <h3>What happens after I create one?</h3>
+        <p>You get a Persona Cartridge you can load into ARCHE and use immediately with any supported model.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Final CTA -->
+<section class="section cta-final">
+  <div class="container">
+    <h2>Build Someone Worth Remembering.</h2>
+    <p>Create a persona that can grow, travel, and endure.</p>
+    <a href="/interview" class="btn btn-primary">Create Your First Persona</a>
+  </div>
+</section>
+
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Templates — CHIMERA{% endblock %}
+{% block content %}
+
+<section class="section" style="padding-top: 8rem;">
+  <div class="container">
+    <h2>Build Your Way</h2>
+    <p class="section-intro">Start with proven foundations or bring your own material.</p>
+    <div class="build-grid">
+      <div class="build-card">
+        <h3>Templates</h3>
+        <p>Perfect for getting started quickly.</p>
+        <ul class="build-list">
+          <li>Mentor</li>
+          <li>Best Friend</li>
+          <li>Dungeon Master</li>
+          <li>Therapist</li>
+          <li>Teacher</li>
+          <li>Blank</li>
+        </ul>
+        <a href="/interview" class="btn btn-secondary" style="margin-top:auto;align-self:flex-start">Start with Template</a>
+      </div>
+      <div class="build-card">
+        <h3>Conversation</h3>
+        <p>Talk with CHIMERA. It asks questions. Challenges assumptions. Learns what you're really trying to build.</p>
+        <a href="/interview" class="btn btn-primary" style="margin-top:auto;align-self:flex-start">Start Interview</a>
+      </div>
+      <div class="build-card">
+        <h3>Source Material</h3>
+        <p>Feed CHIMERA anything.</p>
+        <ul class="build-list">
+          <li>RP sheets</li>
+          <li>Stories</li>
+          <li>Character bios</li>
+          <li>Lore</li>
+          <li>Dialogue</li>
+          <li>Prompt files</li>
+          <li>Notes</li>
+        </ul>
+        <p>CHIMERA discovers what is missing.</p>
+        <a href="/interview" class="btn btn-secondary" style="margin-top:auto;align-self:flex-start">Import Material</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% endblock %}
