@@ -27,16 +27,6 @@ async def templates_list(request: Request):
     return render("templates/list.html", request=request)
 
 
-@router.get("/interview", response_class=HTMLResponse)
-async def interview(request: Request):
-    return render("interview/chat.html", request=request)
-
-
-@router.get("/interview/{session_id}", response_class=HTMLResponse)
-async def interview_session(request: Request, session_id: str):
-    return render("interview/chat.html", request=request, session_id=session_id)
-
-
-@router.get("/preview/{session_id}", response_class=HTMLResponse)
-async def preview(request: Request, session_id: str):
-    return render("persona/preview.html", request=request, session_id=session_id)
+@router.get("/build", response_class=HTMLResponse)
+async def build(request: Request):
+    return render("build.html", request=request)

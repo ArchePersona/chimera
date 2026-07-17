@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Build a Persona — CHIMERA{% endblock %}
+{% block content %}
+
+<section class="section" style="padding-top: 8rem;">
+  <div class="container">
+    <h2>Build a Persona Cartridge</h2>
+    <p class="section-intro">Define the components of your persona below. Once complete, forge it into a portable cartridge.</p>
+
+    <div class="forge-layout">
+      <div class="forge-form" id="forge-form">
+        <div class="ff-group">
+          <label class="ff-label">Name</label>
+          <input class="ff-input" id="f-name" placeholder="Persona name">
+        </div>
+        <div class="ff-group">
+          <label class="ff-label">Summary</label>
+          <textarea class="ff-input ff-textarea" id="f-summary" placeholder="Describe this persona in a few sentences"></textarea>
+        </div>
+        <div class="ff-group">
+          <label class="ff-label">Communication Style</label>
+          <input class="ff-input" id="f-style" placeholder="e.g. Warm and direct, Formal, Casual">
+        </div>
+        <div class="ff-group">
+          <label class="ff-label">Core Values</label>
+          <input class="ff-input" id="f-values" placeholder="Comma-separated values">
+        </div>
+        <div class="ff-group">
+          <label class="ff-label">Motivations</label>
+          <input class="ff-input" id="f-motivations" placeholder="Comma-separated motivations">
+        </div>
+        <div class="ff-group">
+          <label class="ff-label">Strengths</label>
+          <input class="ff-input" id="f-strengths" placeholder="Comma-separated strengths">
+        </div>
+        <div class="ff-group">
+          <label class="ff-label">Limitations</label>
+          <input class="ff-input" id="f-limitations" placeholder="Comma-separated limitations">
+        </div>
+        <div class="ff-group">
+          <label class="ff-label">Goals</label>
+          <input class="ff-input" id="f-goals" placeholder="Comma-separated goals">
+        </div>
+        <div class="ff-group">
+          <label class="ff-label">Boundaries</label>
+          <input class="ff-input" id="f-boundaries" placeholder="Comma-separated boundaries">
+        </div>
+        <div class="ff-group">
+          <label class="ff-label">Behavior Rules</label>
+          <input class="ff-input" id="f-rules" placeholder="Comma-separated rules">
+        </div>
+        <div class="ff-actions">
+          <button class="btn btn-secondary" id="validate-btn">Validate</button>
+          <button class="btn btn-primary" id="forge-btn">Forge Cartridge</button>
+        </div>
+      </div>
+      <div class="forge-output" id="forge-output">
+        <div class="forge-output-placeholder">Complete the form and forge your cartridge. Results will appear here.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const formFields = ["f-name","f-summary","f-style","f-values","f-motivations","f-strengths","f-limitations","f-goals","f-boundaries","f-rules"];
+const apiKeys = ["name","summary","communication_style","core_values","motivations","strengths","limitations","goals","boundaries","behavior_rules"];
+
+function collectDraft() {
+  const body = {};
+  apiKeys.forEach((key, i) => {
+    const el = $(formFields[i]);
+    if (!el) return;
+    const val = el.value.trim();
+    if (["name","summary","communication_style"].includes(key)) {
+      body[key] = val;
+    } else {
+      body[key] = val ? val.split(",").map(s => s.trim()).filter(Boolean) : [];
+    }
+  });
+  body.preferences = {};
+  return body;
+}
+
+$("validate-btn").addEventListener("click", async () => {
+  const resp = await fetch("/api/validate", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(collectDraft()),
+  });
+  const data = await resp.json();
+  const out = $("forge-output");
+  const out = $("forge-output");
+  let html = "";
+  if (data.valid) {
+    html = '<div class="forge-result forge-valid">Draft is valid and ready to forge.</div>';
+  } else {
+    html = '<div class="forge-result forge-invalid">Validation errors:<ul>' +
+      data.errors.map(e => `<li><strong>${e.field}</strong>: ${e.message} <em>(${e.code})</em></li>`).join("") +
+      '</ul></div>';
+  }
+  if (data.warnings && data.warnings.length) {
+    html += '<div style="margin-top:0.5rem;font-size:0.85rem;color:var(--gold)">Warnings:<ul>' +
+      data.warnings.map(w => `<li>${w.message} <em>(${w.code})</em></li>`).join("") +
+      '</ul></div>';
+  }
+  out.innerHTML = html;
+});
+
+$("forge-btn").addEventListener("click", async () => {
+  const resp = await fetch("/api/forge", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(collectDraft()),
+  });
+  const out = $("forge-output");
+  if (resp.ok) {
+    const data = await resp.json();
+    out.innerHTML = '<div class="forge-result forge-valid">Cartridge Forged Successfully</div>' +
+      '<pre class="forge-pre">' + JSON.stringify(data.cartridge, null, 2) + '</pre>';
+  } else {
+    const err = await resp.json();
+    const detail = err.detail || {};
+    out.innerHTML = '<div class="forge-result forge-invalid">' +
+      (detail.error || "Forging failed") + ': ' + (detail.message || "") + '</div>';
+  }
+});
+</script>
+{% endblock %}
