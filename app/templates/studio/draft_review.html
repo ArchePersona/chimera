@@ -52,6 +52,117 @@
   </div>
 </section>
 
+<!-- Forge Confirmation Dialog -->
+<div id="forge-dialog-overlay" class="forge-dialog-overlay" role="dialog" aria-modal="true" aria-labelledby="forge-dialog-title" style="display: none;">
+  <div class="forge-dialog" role="document">
+    <!-- Confirmation State -->
+    <div id="forge-confirm" class="forge-dialog-content">
+      <div class="forge-dialog-header">
+        <h2 id="forge-dialog-title" class="forge-dialog-title">Forge Persona Cartridge</h2>
+        <button type="button" class="forge-dialog-close" id="forge-dialog-close" aria-label="Cancel forge">&times;</button>
+      </div>
+
+      <div class="forge-dialog-body">
+        <p class="forge-intro">
+          You are about to create an <strong>immutable Persona Cartridge</strong> from this draft.
+          Once forged, the cartridge cannot be modified&mdash;only versioned through new forge operations.
+        </p>
+
+        <div class="forge-summary" id="forge-summary">
+          <div class="forge-summary-row">
+            <span class="forge-summary-label">Persona Name</span>
+            <span class="forge-summary-value" id="forge-name"></span>
+          </div>
+          <div class="forge-summary-row">
+            <span class="forge-summary-label">Identifier</span>
+            <span class="forge-summary-value forge-summary-mono" id="forge-identifier"></span>
+          </div>
+          <div class="forge-summary-row">
+            <span class="forge-summary-label">Specification</span>
+            <span class="forge-summary-value forge-summary-mono" id="forge-spec"></span>
+          </div>
+          <div class="forge-summary-row">
+            <span class="forge-summary-label">Validation</span>
+            <span class="forge-summary-value" id="forge-validation-status"></span>
+          </div>
+          <div class="forge-summary-row">
+            <span class="forge-summary-label">Forge Readiness</span>
+            <span class="forge-summary-value" id="forge-readiness-status"></span>
+          </div>
+        </div>
+
+        <div class="forge-notice">
+          <span class="forge-notice-icon" aria-hidden="true">&#9888;</span>
+          <span class="forge-notice-text">This action is irreversible. The forged cartridge will be a permanent, versioned artifact.</span>
+        </div>
+      </div>
+
+      <div class="forge-dialog-actions">
+        <button type="button" class="btn btn-secondary" id="forge-cancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="forge-confirm-btn">Forge Persona Cartridge</button>
+      </div>
+    </div>
+
+    <!-- Progress State -->
+    <div id="forge-progress" class="forge-dialog-content" style="display: none;">
+      <div class="forge-dialog-header">
+        <h2 class="forge-dialog-title">Forging Cartridge...</h2>
+      </div>
+      <div class="forge-dialog-body">
+        <div class="forge-progress-indicator">
+          <div class="forge-progress-spinner" role="status" aria-label="Forging in progress"></div>
+          <p class="forge-progress-text" id="forge-progress-text">Validating and forging your Persona Cartridge...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Success State -->
+    <div id="forge-success" class="forge-dialog-content" style="display: none;">
+      <div class="forge-dialog-header">
+        <h2 class="forge-dialog-title forge-success-title">Cartridge Forged Successfully</h2>
+      </div>
+      <div class="forge-dialog-body">
+        <div class="forge-success-icon" aria-hidden="true">&#10003;</div>
+        <div class="forge-success-details" id="forge-success-details">
+          <div class="forge-summary-row">
+            <span class="forge-summary-label">Identifier</span>
+            <span class="forge-summary-value forge-summary-mono" id="forge-success-id"></span>
+          </div>
+          <div class="forge-summary-row">
+            <span class="forge-summary-label">Specification</span>
+            <span class="forge-summary-value forge-summary-mono" id="forge-success-spec"></span>
+          </div>
+          <div class="forge-summary-row">
+            <span class="forge-summary-label">Forged At</span>
+            <span class="forge-summary-value" id="forge-success-timestamp"></span>
+          </div>
+        </div>
+      </div>
+      <div class="forge-dialog-actions">
+        <a href="{{ base_path }}/cartridges" class="btn btn-secondary" id="forge-to-dashboard">Return to Dashboard</a>
+        <a href="#" class="btn btn-primary" id="forge-to-inspector">Open Cartridge Inspector</a>
+      </div>
+    </div>
+
+    <!-- Error State -->
+    <div id="forge-error" class="forge-dialog-content" style="display: none;">
+      <div class="forge-dialog-header">
+        <h2 class="forge-dialog-title forge-error-title">Forge Failed</h2>
+        <button type="button" class="forge-dialog-close" id="forge-error-close" aria-label="Close error">&times;</button>
+      </div>
+      <div class="forge-dialog-body">
+        <div class="forge-error-icon" aria-hidden="true">&#10007;</div>
+        <p class="forge-error-message" id="forge-error-message"></p>
+        <p class="forge-error-detail" id="forge-error-detail"></p>
+      </div>
+      <div class="forge-dialog-actions">
+        <button type="button" class="btn btn-secondary" id="forge-retry">Try Again</button>
+        <button type="button" class="btn btn-secondary" id="forge-error-close-btn">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ARIA live region for screen reader announcements -->
 <div id="sr-announcements" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
 {% endblock %}
@@ -69,6 +180,7 @@
   var sessionData = null;
   var validationResult = null;
   var isForging = false;
+  var previousFocus = null;
 
   var sections = [
     { id: 'identity', title: 'Identity', icon: '&#9733;', fields: [
@@ -101,11 +213,6 @@
     ]}
   ];
 
-  var requiredFields = [
-    'name', 'identifier', 'summary',
-    'core_values', 'motivations', 'strengths', 'limitations', 'goals', 'boundaries'
-  ];
-
   // ---------------------------------------------------------------------------
   // API Helpers
   // ---------------------------------------------------------------------------
@@ -128,8 +235,17 @@
     if (el) { el.textContent = ''; setTimeout(function () { el.textContent = text; }, 100); }
   }
 
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
   // ---------------------------------------------------------------------------
-  // Rendering
+  // Section Rendering
   // ---------------------------------------------------------------------------
 
   function renderField(field, value) {
@@ -140,41 +256,32 @@
         + '<div class="review-field-value">' + display + '</div>'
         + '</div>';
     }
-
     if (field.type === 'list') {
       var items = Array.isArray(value) ? value : [];
-      var listHtml;
-      if (items.length === 0) {
-        listHtml = '<span class="review-empty">(none)</span>';
-      } else {
-        listHtml = '<ul class="review-list" role="list">'
+      var listHtml = items.length === 0
+        ? '<span class="review-empty">(none)</span>'
+        : '<ul class="review-list" role="list">'
           + items.map(function (item) { return '<li>' + escapeHtml(String(item)) + '</li>'; }).join('')
           + '</ul>';
-      }
       return '<div class="review-field">'
         + '<span class="review-field-label">' + escapeHtml(field.label) + '</span>'
         + '<div class="review-field-value">' + listHtml + '</div>'
         + '</div>';
     }
-
     if (field.type === 'dict') {
       var entries = value && typeof value === 'object' ? Object.entries(value) : [];
-      var dictHtml;
-      if (entries.length === 0) {
-        dictHtml = '<span class="review-empty">(none)</span>';
-      } else {
-        dictHtml = '<dl class="review-dict">'
+      var dictHtml = entries.length === 0
+        ? '<span class="review-empty">(none)</span>'
+        : '<dl class="review-dict">'
           + entries.map(function (e) {
               return '<dt>' + escapeHtml(String(e[0])) + '</dt><dd>' + escapeHtml(String(e[1])) + '</dd>';
             }).join('')
           + '</dl>';
-      }
       return '<div class="review-field">'
         + '<span class="review-field-label">' + escapeHtml(field.label) + '</span>'
         + '<div class="review-field-value">' + dictHtml + '</div>'
         + '</div>';
     }
-
     return '';
   }
 
@@ -183,7 +290,6 @@
       return section.fields.some(function (f) { return e.field === f.key; });
     });
     var hasErrors = sectionErrors.length > 0;
-
     var fieldsHtml = section.fields.map(function (f) {
       var fieldErrors = errors.filter(function (e) { return e.field === f.key; });
       var errorHtml = fieldErrors.length > 0
@@ -193,7 +299,6 @@
         : '';
       return renderField(f, draft[f.key]) + errorHtml;
     }).join('');
-
     var statusClass = hasErrors ? 'review-section-errors' : 'review-section-ok';
     var statusIcon = hasErrors ? '&#10007;' : '&#10003;';
     var statusLabel = hasErrors ? sectionErrors.length + ' issue' + (sectionErrors.length > 1 ? 's' : '') : 'Valid';
@@ -202,8 +307,7 @@
       + '<div class="review-section-header">'
       + '<h2 class="review-section-title">'
       + '<span class="review-section-icon" aria-hidden="true">' + section.icon + '</span> '
-      + escapeHtml(section.title)
-      + '</h2>'
+      + escapeHtml(section.title) + '</h2>'
       + '<span class="review-section-status">' + statusIcon + ' ' + statusLabel + '</span>'
       + '</div>'
       + '<div class="review-section-fields">' + fieldsHtml + '</div>'
@@ -214,10 +318,7 @@
     var container = document.getElementById('draft-sections');
     var loading = document.getElementById('review-loading');
     if (loading) loading.style.display = 'none';
-
-    var html = sections.map(function (s) { return renderSection(s, draft, errors); }).join('');
-    container.innerHTML = html;
-
+    container.innerHTML = sections.map(function (s) { return renderSection(s, draft, errors); }).join('');
     var actionBar = document.getElementById('review-action-bar');
     if (actionBar) actionBar.style.display = 'flex';
   }
@@ -225,7 +326,6 @@
   function updateStatusBadge(sessionState, readyToForge) {
     var statusBadge = document.getElementById('badge-status');
     var readinessBadge = document.getElementById('badge-readiness');
-
     if (statusBadge) {
       var stateLabels = {
         'created': { text: 'Draft: Created', cls: 'badge-draft' },
@@ -238,7 +338,6 @@
       statusBadge.textContent = stateInfo.text;
       statusBadge.className = 'badge ' + stateInfo.cls;
     }
-
     if (readinessBadge) {
       if (readyToForge) {
         readinessBadge.textContent = 'Forge Readiness: Ready';
@@ -260,7 +359,6 @@
   function updateValidationSummary(result) {
     var el = document.getElementById('validation-summary');
     if (!el) return;
-
     if (result.valid) {
       el.innerHTML = '<span class="review-validation-ok">&#10003; Draft passes all validation checks</span>';
     } else {
@@ -275,18 +373,91 @@
 
   function setForgeButtonState(enabled) {
     var btn = document.getElementById('btn-forge');
-    if (btn) {
-      btn.disabled = !enabled;
+    if (btn) btn.disabled = !enabled;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Forge Dialog — Focus Trapping
+  // ---------------------------------------------------------------------------
+
+  function trapFocus(e) {
+    var dialog = document.querySelector('.forge-dialog');
+    if (!dialog) return;
+    var focusable = dialog.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    if (focusable.length === 0) return;
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    if (e.key === 'Tab') {
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
   }
 
-  function escapeHtml(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
+  function openForgeDialog() {
+    previousFocus = document.activeElement;
+    var overlay = document.getElementById('forge-dialog-overlay');
+    overlay.style.display = 'flex';
+    overlay.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', trapFocus);
+
+    // Populate summary
+    if (draftData) {
+      document.getElementById('forge-name').textContent = draftData.name || '(unnamed)';
+      document.getElementById('forge-identifier').textContent = draftData.identifier || '(no identifier)';
+    }
+    document.getElementById('forge-spec').textContent = 'v0.6.0';
+
+    if (validationResult) {
+      var vEl = document.getElementById('forge-validation-status');
+      if (validationResult.valid) {
+        vEl.innerHTML = '<span class="forge-status-ok">&#10003; Passed</span>';
+      } else {
+        vEl.innerHTML = '<span class="forge-status-fail">&#10007; ' + validationResult.errors.length + ' error(s)</span>';
+      }
+    } else {
+      document.getElementById('forge-validation-status').innerHTML = '<span class="forge-status-unchecked">Unchecked</span>';
+    }
+
+    if (sessionData) {
+      var rEl = document.getElementById('forge-readiness-status');
+      if (sessionData.ready_to_forge) {
+        rEl.innerHTML = '<span class="forge-status-ok">&#10003; Ready</span>';
+      } else {
+        rEl.innerHTML = '<span class="forge-status-fail">&#10007; Not Ready</span>';
+      }
+    }
+
+    // Show confirm state, hide others
+    document.getElementById('forge-confirm').style.display = '';
+    document.getElementById('forge-progress').style.display = 'none';
+    document.getElementById('forge-success').style.display = 'none';
+    document.getElementById('forge-error').style.display = 'none';
+
+    // Focus the cancel button
+    document.getElementById('forge-cancel').focus();
+    announce('Forge confirmation dialog opened. Press Escape to cancel.');
+  }
+
+  function closeForgeDialog() {
+    var overlay = document.getElementById('forge-dialog-overlay');
+    overlay.style.display = 'none';
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    document.removeEventListener('keydown', trapFocus);
+    if (previousFocus) { previousFocus.focus(); previousFocus = null; }
+  }
+
+  function showForgeState(state) {
+    ['forge-confirm', 'forge-progress', 'forge-success', 'forge-error'].forEach(function (id) {
+      document.getElementById(id).style.display = 'none';
+    });
+    document.getElementById('forge-' + state).style.display = '';
   }
 
   // ---------------------------------------------------------------------------
@@ -296,21 +467,14 @@
   function loadDraft() {
     apiGet('/sessions/' + SESSION_ID + '/draft').then(function (res) {
       if (!res.ok) {
-        if (res.data && res.data.detail) {
-          Studio.toast('Error loading draft: ' + res.data.detail, 'error');
-        } else {
-          Studio.toast('Error loading draft.', 'error');
-        }
+        Studio.toast(res.data && res.data.detail ? 'Error: ' + res.data.detail : 'Error loading draft.', 'error');
         return;
       }
-
       draftData = res.data.draft;
       sessionData = res.data;
-
       renderAllSections(draftData, []);
       updateStatusBadge(res.data.state, res.data.ready_to_forge);
       updateProgressText(res.data.progress);
-
       if (res.data.ready_to_forge) {
         setForgeButtonState(true);
         Studio.toast('Draft is ready to forge.', 'success', 3000);
@@ -321,7 +485,6 @@
           Studio.toast(issues.length + ' required field(s) missing.', 'info', 4000);
         }
       }
-
       announce('Draft loaded. ' + res.data.progress.answered_questions + ' of ' + res.data.progress.total_questions + ' questions answered.');
     }).catch(function () {
       Studio.toast('Network error loading draft.', 'error');
@@ -335,22 +498,14 @@
   function handleValidate() {
     var btn = document.getElementById('btn-validate');
     if (btn) { btn.disabled = true; btn.textContent = 'Validating...'; }
-
     Studio.showLoading('Validating draft...');
-
     apiPost('/sessions/' + SESSION_ID + '/validate').then(function (res) {
       Studio.hideLoading();
       if (btn) { btn.disabled = false; btn.textContent = 'Validate Draft'; }
-
-      if (!res.ok) {
-        Studio.toast('Validation request failed.', 'error');
-        return;
-      }
-
+      if (!res.ok) { Studio.toast('Validation request failed.', 'error'); return; }
       validationResult = res.data;
       renderAllSections(draftData, res.data.errors);
       updateValidationSummary(res.data);
-
       if (res.data.valid) {
         Studio.toast('Draft validation passed.', 'success');
         setForgeButtonState(sessionData && sessionData.ready_to_forge);
@@ -371,44 +526,48 @@
   // Forge
   // ---------------------------------------------------------------------------
 
-  function handleForge() {
+  function handleForgeConfirm() {
     if (isForging) return;
     isForging = true;
-
-    var btn = document.getElementById('btn-forge');
-    if (btn) { btn.disabled = true; btn.textContent = 'Forging...'; }
-
-    Studio.showLoading('Forging cartridge from draft...');
+    showForgeState('progress');
+    document.getElementById('forge-progress-text').textContent = 'Validating and forging your Persona Cartridge...';
+    announce('Forging cartridge. Please wait.');
 
     apiPost('/sessions/' + SESSION_ID + '/forge').then(function (res) {
-      Studio.hideLoading();
       isForging = false;
-
       if (!res.ok) {
-        if (btn) { btn.disabled = false; btn.textContent = 'Forge Cartridge'; }
+        showForgeState('error');
         var msg = 'Forge failed.';
         if (res.data && res.data.message) msg = res.data.message;
-        Studio.toast(msg, 'error');
-        announce(msg);
+        var detail = '';
+        if (res.data && res.data.detail) detail = res.data.detail;
+        document.getElementById('forge-error-message').textContent = msg;
+        document.getElementById('forge-error-detail').textContent = detail;
+        announce('Forge failed: ' + msg);
         return;
       }
-
       if (res.data.success) {
+        showForgeState('success');
+        var c = res.data.cartridge;
+        document.getElementById('forge-success-id').textContent = c.identity.identifier;
+        document.getElementById('forge-success-spec').textContent = 'v' + c.manifest.schema_version;
+        document.getElementById('forge-success-timestamp').textContent = new Date(c.manifest.created_at).toLocaleString();
+        var inspectorUrl = BASE_PATH + '/cartridges/' + encodeURIComponent(c.identity.identifier);
+        document.getElementById('forge-to-inspector').href = inspectorUrl;
         Studio.toast('Cartridge forged successfully!', 'success');
-        announce('Cartridge forged successfully. Redirecting to inspector.');
-        var cartridgeId = res.data.cartridge.identity.identifier;
-        setTimeout(function () {
-          window.location.href = BASE_PATH + '/cartridges/' + encodeURIComponent(cartridgeId);
-        }, 1500);
+        announce('Cartridge forged successfully. Identifier: ' + c.identity.identifier);
       } else {
-        if (btn) { btn.disabled = false; btn.textContent = 'Forge Cartridge'; }
-        Studio.toast('Forge returned an unexpected result.', 'error');
+        showForgeState('error');
+        document.getElementById('forge-error-message').textContent = 'Forge returned an unexpected result.';
+        document.getElementById('forge-error-detail').textContent = '';
+        announce('Forge returned an unexpected result.');
       }
     }).catch(function () {
-      Studio.hideLoading();
       isForging = false;
-      if (btn) { btn.disabled = false; btn.textContent = 'Forge Cartridge'; }
-      Studio.toast('Network error during forge.', 'error');
+      showForgeState('error');
+      document.getElementById('forge-error-message').textContent = 'Network error during forge.';
+      document.getElementById('forge-error-detail').textContent = '';
+      announce('Network error during forge.');
     });
   }
 
@@ -417,7 +576,26 @@
   // ---------------------------------------------------------------------------
 
   document.getElementById('btn-validate').addEventListener('click', handleValidate);
-  document.getElementById('btn-forge').addEventListener('click', handleForge);
+  document.getElementById('btn-forge').addEventListener('click', openForgeDialog);
+  document.getElementById('forge-dialog-close').addEventListener('click', closeForgeDialog);
+  document.getElementById('forge-cancel').addEventListener('click', closeForgeDialog);
+  document.getElementById('forge-confirm-btn').addEventListener('click', handleForgeConfirm);
+  document.getElementById('forge-error-close').addEventListener('click', closeForgeDialog);
+  document.getElementById('forge-error-close-btn').addEventListener('click', closeForgeDialog);
+  document.getElementById('forge-retry').addEventListener('click', function () { openForgeDialog(); });
+
+  document.getElementById('forge-dialog-overlay').addEventListener('click', function (e) {
+    if (e.target === e.currentTarget) closeForgeDialog();
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      var overlay = document.getElementById('forge-dialog-overlay');
+      if (overlay && overlay.style.display === 'flex') {
+        closeForgeDialog();
+      }
+    }
+  });
 
   // ---------------------------------------------------------------------------
   // Init
