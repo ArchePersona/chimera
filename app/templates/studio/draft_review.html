@@ -1,0 +1,429 @@
+{% extends "base.html" %}
+
+{% block title %}Draft Review — CHIMERA Studio{% endblock %}
+
+{% block content %}
+<section class="draft-review-section" aria-labelledby="draft-review-title">
+  <div class="studio-header-banner">
+    <div>
+      <h1 id="draft-review-title" class="banner-title">Draft Review</h1>
+      <p class="banner-subtitle">
+        Review authored persona material prior to cartridge forging.
+      </p>
+    </div>
+    <div class="banner-actions">
+      <a href="{{ base_path }}/interviews/{{ session_id }}" class="btn btn-secondary">&larr; Return to Interview</a>
+    </div>
+  </div>
+
+  <!-- Status Bar -->
+  <div class="review-status-bar" id="review-status-bar">
+    <div class="review-status-left">
+      <span class="badge badge-draft" id="badge-status">Loading...</span>
+      <span class="badge badge-spec" id="badge-readiness">Forge Readiness: Checking...</span>
+    </div>
+    <div class="review-status-right">
+      <span class="review-progress-text" id="progress-text"></span>
+    </div>
+  </div>
+
+  <!-- Draft Sections Container -->
+  <div id="draft-sections" class="draft-sections" role="region" aria-label="Draft review sections">
+    <div class="review-loading" id="review-loading">
+      <div class="empty-state" style="padding: 3rem 2rem;">
+        <div class="empty-state-icon" aria-hidden="true">&#9881;</div>
+        <h2 class="empty-state-title">Loading Draft...</h2>
+        <p class="empty-state-desc">Fetching draft data from session.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action Bar -->
+  <div class="review-action-bar" id="review-action-bar" style="display: none;">
+    <div class="review-validation-summary" id="validation-summary"></div>
+    <div class="review-actions">
+      <button type="button" class="btn btn-secondary" id="btn-validate" aria-label="Validate draft">
+        Validate Draft
+      </button>
+      <button type="button" class="btn btn-primary" id="btn-forge" disabled aria-label="Forge cartridge">
+        Forge Cartridge
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- ARIA live region for screen reader announcements -->
+<div id="sr-announcements" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+
+  var SESSION_ID = {{ session_id | tojson }};
+  var BASE_PATH = {{ base_path | tojson }};
+  var API_BASE = BASE_PATH + '/api';
+
+  var draftData = null;
+  var sessionData = null;
+  var validationResult = null;
+  var isForging = false;
+
+  var sections = [
+    { id: 'identity', title: 'Identity', icon: '&#9733;', fields: [
+      { key: 'name', label: 'Display Name', type: 'text' },
+      { key: 'identifier', label: 'Identifier', type: 'text', mono: true },
+      { key: 'summary', label: 'Summary', type: 'text' },
+      { key: 'description', label: 'Description', type: 'text', optional: true },
+      { key: 'aliases', label: 'Aliases', type: 'list', optional: true }
+    ]},
+    { id: 'character', title: 'Character', icon: '&#9825;', fields: [
+      { key: 'core_values', label: 'Core Values', type: 'list' },
+      { key: 'motivations', label: 'Motivations', type: 'list' },
+      { key: 'strengths', label: 'Strengths', type: 'list' },
+      { key: 'limitations', label: 'Limitations', type: 'list' },
+      { key: 'goals', label: 'Goals', type: 'list' },
+      { key: 'boundaries', label: 'Boundaries', type: 'list' }
+    ]},
+    { id: 'communication', title: 'Communication', icon: '&#9993;', fields: [
+      { key: 'communication_style', label: 'Communication Style', type: 'text', optional: true },
+      { key: 'tone', label: 'Tone', type: 'list', optional: true },
+      { key: 'vocabulary_preferences', label: 'Vocabulary Preferences', type: 'list', optional: true },
+      { key: 'response_tendencies', label: 'Response Tendencies', type: 'list', optional: true },
+      { key: 'formatting_preferences', label: 'Formatting Preferences', type: 'list', optional: true }
+    ]},
+    { id: 'preferences', title: 'Preferences', icon: '&#9881;', fields: [
+      { key: 'preferences', label: 'Preferences', type: 'dict', optional: true }
+    ]},
+    { id: 'behavior', title: 'Behavior', icon: '&#9878;', fields: [
+      { key: 'behavior_rules', label: 'Behavior Rules', type: 'list', optional: true }
+    ]}
+  ];
+
+  var requiredFields = [
+    'name', 'identifier', 'summary',
+    'core_values', 'motivations', 'strengths', 'limitations', 'goals', 'boundaries'
+  ];
+
+  // ---------------------------------------------------------------------------
+  // API Helpers
+  // ---------------------------------------------------------------------------
+
+  function apiGet(path) {
+    return fetch(API_BASE + path, { method: 'GET', headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); });
+  }
+
+  function apiPost(path, body) {
+    return fetch(API_BASE + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, data: d }; }); });
+  }
+
+  function announce(text) {
+    var el = document.getElementById('sr-announcements');
+    if (el) { el.textContent = ''; setTimeout(function () { el.textContent = text; }, 100); }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Rendering
+  // ---------------------------------------------------------------------------
+
+  function renderField(field, value) {
+    if (field.type === 'text') {
+      var display = value && String(value).trim() ? escapeHtml(String(value)) : '<span class="review-empty">(empty)</span>';
+      return '<div class="review-field' + (field.mono ? ' review-field-mono' : '') + '">'
+        + '<span class="review-field-label">' + escapeHtml(field.label) + '</span>'
+        + '<div class="review-field-value">' + display + '</div>'
+        + '</div>';
+    }
+
+    if (field.type === 'list') {
+      var items = Array.isArray(value) ? value : [];
+      var listHtml;
+      if (items.length === 0) {
+        listHtml = '<span class="review-empty">(none)</span>';
+      } else {
+        listHtml = '<ul class="review-list" role="list">'
+          + items.map(function (item) { return '<li>' + escapeHtml(String(item)) + '</li>'; }).join('')
+          + '</ul>';
+      }
+      return '<div class="review-field">'
+        + '<span class="review-field-label">' + escapeHtml(field.label) + '</span>'
+        + '<div class="review-field-value">' + listHtml + '</div>'
+        + '</div>';
+    }
+
+    if (field.type === 'dict') {
+      var entries = value && typeof value === 'object' ? Object.entries(value) : [];
+      var dictHtml;
+      if (entries.length === 0) {
+        dictHtml = '<span class="review-empty">(none)</span>';
+      } else {
+        dictHtml = '<dl class="review-dict">'
+          + entries.map(function (e) {
+              return '<dt>' + escapeHtml(String(e[0])) + '</dt><dd>' + escapeHtml(String(e[1])) + '</dd>';
+            }).join('')
+          + '</dl>';
+      }
+      return '<div class="review-field">'
+        + '<span class="review-field-label">' + escapeHtml(field.label) + '</span>'
+        + '<div class="review-field-value">' + dictHtml + '</div>'
+        + '</div>';
+    }
+
+    return '';
+  }
+
+  function renderSection(section, draft, errors) {
+    var sectionErrors = errors.filter(function (e) {
+      return section.fields.some(function (f) { return e.field === f.key; });
+    });
+    var hasErrors = sectionErrors.length > 0;
+
+    var fieldsHtml = section.fields.map(function (f) {
+      var fieldErrors = errors.filter(function (e) { return e.field === f.key; });
+      var errorHtml = fieldErrors.length > 0
+        ? '<div class="review-field-errors" role="alert">'
+          + fieldErrors.map(function (e) { return '<span class="review-field-error">' + escapeHtml(e.message) + '</span>'; }).join('')
+          + '</div>'
+        : '';
+      return renderField(f, draft[f.key]) + errorHtml;
+    }).join('');
+
+    var statusClass = hasErrors ? 'review-section-errors' : 'review-section-ok';
+    var statusIcon = hasErrors ? '&#10007;' : '&#10003;';
+    var statusLabel = hasErrors ? sectionErrors.length + ' issue' + (sectionErrors.length > 1 ? 's' : '') : 'Valid';
+
+    return '<div class="review-section ' + statusClass + '" data-section="' + section.id + '">'
+      + '<div class="review-section-header">'
+      + '<h2 class="review-section-title">'
+      + '<span class="review-section-icon" aria-hidden="true">' + section.icon + '</span> '
+      + escapeHtml(section.title)
+      + '</h2>'
+      + '<span class="review-section-status">' + statusIcon + ' ' + statusLabel + '</span>'
+      + '</div>'
+      + '<div class="review-section-fields">' + fieldsHtml + '</div>'
+      + '</div>';
+  }
+
+  function renderAllSections(draft, errors) {
+    var container = document.getElementById('draft-sections');
+    var loading = document.getElementById('review-loading');
+    if (loading) loading.style.display = 'none';
+
+    var html = sections.map(function (s) { return renderSection(s, draft, errors); }).join('');
+    container.innerHTML = html;
+
+    var actionBar = document.getElementById('review-action-bar');
+    if (actionBar) actionBar.style.display = 'flex';
+  }
+
+  function updateStatusBadge(sessionState, readyToForge) {
+    var statusBadge = document.getElementById('badge-status');
+    var readinessBadge = document.getElementById('badge-readiness');
+
+    if (statusBadge) {
+      var stateLabels = {
+        'created': { text: 'Draft: Created', cls: 'badge-draft' },
+        'in_progress': { text: 'Draft: In Progress', cls: 'badge-draft' },
+        'ready_to_forge': { text: 'Draft: Ready to Forge', cls: 'badge-active' },
+        'completed': { text: 'Draft: Completed', cls: 'badge-spec' },
+        'cancelled': { text: 'Draft: Cancelled', cls: 'badge-archived' }
+      };
+      var stateInfo = stateLabels[sessionState] || { text: 'State: ' + sessionState, cls: 'badge-draft' };
+      statusBadge.textContent = stateInfo.text;
+      statusBadge.className = 'badge ' + stateInfo.cls;
+    }
+
+    if (readinessBadge) {
+      if (readyToForge) {
+        readinessBadge.textContent = 'Forge Readiness: Ready';
+        readinessBadge.className = 'badge badge-active';
+      } else {
+        readinessBadge.textContent = 'Forge Readiness: Not Ready';
+        readinessBadge.className = 'badge badge-spec';
+      }
+    }
+  }
+
+  function updateProgressText(progress) {
+    var el = document.getElementById('progress-text');
+    if (el && progress) {
+      el.textContent = progress.answered_questions + ' / ' + progress.total_questions + ' questions answered';
+    }
+  }
+
+  function updateValidationSummary(result) {
+    var el = document.getElementById('validation-summary');
+    if (!el) return;
+
+    if (result.valid) {
+      el.innerHTML = '<span class="review-validation-ok">&#10003; Draft passes all validation checks</span>';
+    } else {
+      var errCount = result.errors.length;
+      var warnCount = result.warnings.length;
+      var parts = [];
+      if (errCount > 0) parts.push(errCount + ' error' + (errCount > 1 ? 's' : ''));
+      if (warnCount > 0) parts.push(warnCount + ' warning' + (warnCount > 1 ? 's' : ''));
+      el.innerHTML = '<span class="review-validation-fail">&#10007; ' + parts.join(', ') + ' found</span>';
+    }
+  }
+
+  function setForgeButtonState(enabled) {
+    var btn = document.getElementById('btn-forge');
+    if (btn) {
+      btn.disabled = !enabled;
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Load Draft
+  // ---------------------------------------------------------------------------
+
+  function loadDraft() {
+    apiGet('/sessions/' + SESSION_ID + '/draft').then(function (res) {
+      if (!res.ok) {
+        if (res.data && res.data.detail) {
+          Studio.toast('Error loading draft: ' + res.data.detail, 'error');
+        } else {
+          Studio.toast('Error loading draft.', 'error');
+        }
+        return;
+      }
+
+      draftData = res.data.draft;
+      sessionData = res.data;
+
+      renderAllSections(draftData, []);
+      updateStatusBadge(res.data.state, res.data.ready_to_forge);
+      updateProgressText(res.data.progress);
+
+      if (res.data.ready_to_forge) {
+        setForgeButtonState(true);
+        Studio.toast('Draft is ready to forge.', 'success', 3000);
+      } else {
+        setForgeButtonState(false);
+        var issues = res.data.readiness_issues;
+        if (issues && issues.length > 0) {
+          Studio.toast(issues.length + ' required field(s) missing.', 'info', 4000);
+        }
+      }
+
+      announce('Draft loaded. ' + res.data.progress.answered_questions + ' of ' + res.data.progress.total_questions + ' questions answered.');
+    }).catch(function () {
+      Studio.toast('Network error loading draft.', 'error');
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Validate
+  // ---------------------------------------------------------------------------
+
+  function handleValidate() {
+    var btn = document.getElementById('btn-validate');
+    if (btn) { btn.disabled = true; btn.textContent = 'Validating...'; }
+
+    Studio.showLoading('Validating draft...');
+
+    apiPost('/sessions/' + SESSION_ID + '/validate').then(function (res) {
+      Studio.hideLoading();
+      if (btn) { btn.disabled = false; btn.textContent = 'Validate Draft'; }
+
+      if (!res.ok) {
+        Studio.toast('Validation request failed.', 'error');
+        return;
+      }
+
+      validationResult = res.data;
+      renderAllSections(draftData, res.data.errors);
+      updateValidationSummary(res.data);
+
+      if (res.data.valid) {
+        Studio.toast('Draft validation passed.', 'success');
+        setForgeButtonState(sessionData && sessionData.ready_to_forge);
+        announce('Draft validation passed.');
+      } else {
+        setForgeButtonState(false);
+        Studio.toast(res.data.errors.length + ' validation error(s) found.', 'error');
+        announce('Draft validation failed with ' + res.data.errors.length + ' errors.');
+      }
+    }).catch(function () {
+      Studio.hideLoading();
+      if (btn) { btn.disabled = false; btn.textContent = 'Validate Draft'; }
+      Studio.toast('Network error during validation.', 'error');
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Forge
+  // ---------------------------------------------------------------------------
+
+  function handleForge() {
+    if (isForging) return;
+    isForging = true;
+
+    var btn = document.getElementById('btn-forge');
+    if (btn) { btn.disabled = true; btn.textContent = 'Forging...'; }
+
+    Studio.showLoading('Forging cartridge from draft...');
+
+    apiPost('/sessions/' + SESSION_ID + '/forge').then(function (res) {
+      Studio.hideLoading();
+      isForging = false;
+
+      if (!res.ok) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Forge Cartridge'; }
+        var msg = 'Forge failed.';
+        if (res.data && res.data.message) msg = res.data.message;
+        Studio.toast(msg, 'error');
+        announce(msg);
+        return;
+      }
+
+      if (res.data.success) {
+        Studio.toast('Cartridge forged successfully!', 'success');
+        announce('Cartridge forged successfully. Redirecting to inspector.');
+        var cartridgeId = res.data.cartridge.identity.identifier;
+        setTimeout(function () {
+          window.location.href = BASE_PATH + '/cartridges/' + encodeURIComponent(cartridgeId);
+        }, 1500);
+      } else {
+        if (btn) { btn.disabled = false; btn.textContent = 'Forge Cartridge'; }
+        Studio.toast('Forge returned an unexpected result.', 'error');
+      }
+    }).catch(function () {
+      Studio.hideLoading();
+      isForging = false;
+      if (btn) { btn.disabled = false; btn.textContent = 'Forge Cartridge'; }
+      Studio.toast('Network error during forge.', 'error');
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Event Listeners
+  // ---------------------------------------------------------------------------
+
+  document.getElementById('btn-validate').addEventListener('click', handleValidate);
+  document.getElementById('btn-forge').addEventListener('click', handleForge);
+
+  // ---------------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------------
+
+  loadDraft();
+})();
+</script>
+{% endblock %}
