@@ -16,9 +16,13 @@ app.include_router(web.router)
 app.include_router(api.router)
 
 
+def _is_api_path(path: str) -> bool:
+    return "/api/" in path
+
+
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    if request.url.path.startswith("/api/"):
+    if _is_api_path(request.url.path):
         detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
         return JSONResponse(status_code=exc.status_code, content=detail)
     template = env.get_template("studio/error.html")
@@ -33,7 +37,9 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    if request.url.path.startswith("/api/"):
+    import traceback
+    traceback.print_exc()
+    if _is_api_path(request.url.path):
         return JSONResponse(
             status_code=500,
             content={"error": "INTERNAL_ERROR", "message": "An unexpected error occurred."},
