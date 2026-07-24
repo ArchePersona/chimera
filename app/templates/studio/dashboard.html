@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Cartridge Dashboard — CHIMERA Studio{% endblock %}
+
+{% block content %}
+<section class="dashboard-section" aria-labelledby="dashboard-title">
+  <div class="studio-header-banner">
+    <div>
+      <h1 id="dashboard-title" class="banner-title">Cartridge Dashboard</h1>
+      <p class="banner-subtitle">
+        Manage, inspect, and export your forged Persona Cartridges.
+      </p>
+    </div>
+    <div class="banner-actions">
+      <a href="{{ base_path }}/cartridges/new" class="btn btn-primary">
+        <span aria-hidden="true">+</span> Create New Persona
+      </a>
+    </div>
+  </div>
+
+  <!-- Dashboard Filter / Search Bar Placeholder Frame -->
+  <div class="dashboard-controls" style="margin-bottom: 2rem;">
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; justify-content: space-between;">
+      <div style="display: flex; gap: 0.5rem;">
+        <span class="badge badge-spec">Filter Status: All</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Empty State Frame for Dashboard Milestone 1 -->
+  <div class="empty-state">
+    <div class="empty-state-icon" aria-hidden="true">🔮</div>
+    <h2 class="empty-state-title">No Persona Cartridges Yet</h2>
+    <p class="empty-state-desc">
+      Begin by creating a new persona through CHIMERA Studio's guided interview workflow.
+    </p>
+    <a href="{{ base_path }}/cartridges/new" class="btn btn-primary">
+      Start Guided Interview
+    </a>
+  </div>
+</section>
+{% endblock %}

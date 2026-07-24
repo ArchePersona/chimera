@@ -1,120 +1,256 @@
 from __future__ import annotations
 
+import copy
+import uuid
 from datetime import datetime, timezone
 
 from app.models.cartridge import (
+    SCHEMA_NAME,
+    SCHEMA_VERSION,
+    BehaviorModule,
+    BehaviorPolicy,
+    CartridgeManifest,
     CartridgeStatus,
     CartridgeValidationError,
     CartridgeValidationResult,
     CartridgeValidationWarning,
+    CharacterModule,
+    CommunicationModule,
     ForgeError,
     ForgeErrorCode,
     ForgeResult,
+    IdentityModule,
     PersonaCartridge,
     PersonaDraft,
-    ValidationCode,
+    PreferenceEntry,
+    PreferenceModule,
+    generate_behavior_identifiers,
 )
+from app.specification.validator import SpecificationValidator
 
 
 class CartridgeForge:
     """Single authoritative forge path for CHIMERA cartridges."""
 
-    _REQUIRED_TEXT_FIELDS = ["name", "summary", "communication_style"]
-    _REQUIRED_LIST_FIELDS = [
-        "core_values",
-        "motivations",
-        "strengths",
-        "limitations",
-        "goals",
-        "boundaries",
-    ]
-
     @classmethod
-    def validate(cls, draft: PersonaDraft) -> CartridgeValidationResult:
-        PersonaDraft.normalize(draft)
+    def validate(cls, draft: PersonaDraft) -> tuple[CartridgeValidationResult, PersonaDraft]:
+        working = copy.deepcopy(draft)
+        PersonaDraft.normalize(working)
 
         errors: list[CartridgeValidationError] = []
         warnings: list[CartridgeValidationWarning] = []
 
-        for field_name in cls._REQUIRED_TEXT_FIELDS:
-            val = getattr(draft, field_name, "")
-            if not val:
-                errors.append(
-                    CartridgeValidationError(
-                        code=ValidationCode.REQUIRED_FIELD_EMPTY,
-                        field=field_name,
-                        message=f"'{field_name}' must not be empty",
-                    )
-                )
+        modules = cls._build_modules(working)
+        for mod in modules:
+            mod_errors, mod_warnings = mod.validate()
+            errors.extend(mod_errors)
+            warnings.extend(mod_warnings)
 
-        for field_name in cls._REQUIRED_LIST_FIELDS:
-            val = getattr(draft, field_name, [])
-            if not isinstance(val, list) or len(val) == 0:
-                errors.append(
-                    CartridgeValidationError(
-                        code=ValidationCode.REQUIRED_LIST_EMPTY,
-                        field=field_name,
-                        message=f"'{field_name}' must contain at least one item",
-                    )
-                )
+        if errors:
+            return CartridgeValidationResult(valid=False, errors=errors, warnings=warnings), working
 
-        if not isinstance(draft.preferences, dict):
-            errors.append(
-                CartridgeValidationError(
-                    code=ValidationCode.INVALID_TYPE,
-                    field="preferences",
-                    message="'preferences' must be a dict",
-                )
-            )
-
-        if len(draft.behavior_rules) == 0:
-            warnings.append(
-                CartridgeValidationWarning(
-                    code=ValidationCode.NO_BEHAVIOR_RULES,
-                    field="behavior_rules",
-                    message="No behavior rules defined. Consider adding at least one rule.",
-                )
-            )
-
-        return CartridgeValidationResult(
-            valid=len(errors) == 0,
-            errors=errors,
-            warnings=warnings,
-        )
+        working.status = CartridgeStatus.VALIDATED
+        return CartridgeValidationResult(valid=True, warnings=warnings), working
 
     @classmethod
     def forge(cls, draft: PersonaDraft) -> ForgeResult:
-        validation = cls.validate(draft)
-        if not validation.valid:
+        result, validated = cls.validate(draft)
+
+        if not result.valid:
             return ForgeResult(
                 success=False,
                 error=ForgeError(
                     code=ForgeErrorCode.VALIDATION_FAILED,
                     message="Cartridge validation failed",
-                    detail="; ".join(e.message for e in validation.errors),
+                    detail="; ".join(e.message for e in result.errors),
                 ),
+                warnings=result.warnings,
             )
 
-        draft.updated_at = datetime.now(timezone.utc)
+        validated.updated_at = datetime.now(timezone.utc)
 
-        cartridge = PersonaCartridge(
-            name=draft.name,
-            summary=draft.summary,
-            communication_style=draft.communication_style,
-            core_values=tuple(draft.core_values),
-            motivations=tuple(draft.motivations),
-            strengths=tuple(draft.strengths),
-            limitations=tuple(draft.limitations),
-            goals=tuple(draft.goals),
-            boundaries=tuple(draft.boundaries),
-            preferences=tuple(sorted(draft.preferences.items())),
-            behavior_rules=tuple(draft.behavior_rules),
-            cartridge_id=draft.cartridge_id,
-            schema_name=draft.schema_name,
-            schema_version=draft.schema_version,
-            status=CartridgeStatus.FORGED,
-            created_at=draft.created_at,
-            updated_at=draft.updated_at,
+        manifest = CartridgeManifest(
+            cartridge_id=str(uuid.uuid4()),
+            schema_name=SCHEMA_NAME,
+            schema_version=SCHEMA_VERSION,
+            created_at=validated.created_at,
+            updated_at=validated.updated_at,
         )
 
-        return ForgeResult(success=True, cartridge=cartridge)
+        identity = IdentityModule(
+            display_name=validated.name,
+            identifier=validated.identifier,
+            summary=validated.summary,
+            description=validated.description,
+            aliases=tuple(validated.aliases),
+        )
+
+        character = CharacterModule(
+            core_values=tuple(validated.core_values),
+            motivations=tuple(validated.motivations),
+            strengths=tuple(validated.strengths),
+            limitations=tuple(validated.limitations),
+            goals=tuple(validated.goals),
+            boundaries=tuple(validated.boundaries),
+        )
+
+        preferences = PreferenceModule(
+            entries=tuple(
+                PreferenceEntry(key=k, value=v)
+                for k, v in sorted(validated.preferences.items())
+            ),
+        )
+
+        identifiers = generate_behavior_identifiers(validated.behavior_rules)
+        behavior = BehaviorModule(
+            policies=tuple(
+                BehaviorPolicy(
+                    identifier=identifiers[i],
+                    title=r.strip(),
+                )
+                for i, r in enumerate(validated.behavior_rules)
+            ),
+        )
+
+        communication = CommunicationModule(
+            communication_style=validated.communication_style,
+            tone=tuple(validated.tone),
+            vocabulary_preferences=tuple(validated.vocabulary_preferences),
+            response_tendencies=tuple(validated.response_tendencies),
+            formatting_preferences=tuple(validated.formatting_preferences),
+        )
+
+        cartridge = PersonaCartridge(
+            manifest=manifest,
+            identity=identity,
+            character=character,
+            preferences=preferences,
+            behavior=behavior,
+            communication=communication,
+            status=CartridgeStatus.FORGED,
+        )
+
+        spec_result = SpecificationValidator.validate(cartridge)
+        if not spec_result.compliant:
+            return ForgeResult(
+                success=False,
+                error=ForgeError(
+                    code=ForgeErrorCode.VALIDATION_FAILED,
+                    message="Cartridge specification validation failed",
+                    detail="; ".join(f"{v.rule}: {v.reason}" for v in spec_result.violations),
+                ),
+                warnings=result.warnings,
+            )
+
+        return ForgeResult(
+            success=True,
+            cartridge=cartridge,
+            warnings=result.warnings,
+        )
+
+    @classmethod
+    def validate_cartridge(
+        cls, cartridge: PersonaCartridge
+    ) -> tuple[CartridgeValidationResult, dict]:
+        """Validate an existing cartridge for re-validation in the inspector.
+
+        Returns module-level validation and specification compliance.
+        """
+        errors: list[CartridgeValidationError] = []
+        warnings: list[CartridgeValidationWarning] = []
+
+        modules = [
+            IdentityModule(
+                display_name=cartridge.identity.display_name,
+                identifier=cartridge.identity.identifier,
+                summary=cartridge.identity.summary,
+                description=cartridge.identity.description,
+                aliases=cartridge.identity.aliases,
+            ),
+            CharacterModule(
+                core_values=cartridge.character.core_values,
+                motivations=cartridge.character.motivations,
+                strengths=cartridge.character.strengths,
+                limitations=cartridge.character.limitations,
+                goals=cartridge.character.goals,
+                boundaries=cartridge.character.boundaries,
+            ),
+            PreferenceModule(entries=cartridge.preferences.entries),
+            BehaviorModule(policies=cartridge.behavior.policies),
+            CommunicationModule(
+                communication_style=cartridge.communication.communication_style,
+                tone=cartridge.communication.tone,
+                vocabulary_preferences=cartridge.communication.vocabulary_preferences,
+                response_tendencies=cartridge.communication.response_tendencies,
+                formatting_preferences=cartridge.communication.formatting_preferences,
+            ),
+        ]
+        for mod in modules:
+            mod_errors, mod_warnings = mod.validate()
+            errors.extend(mod_errors)
+            warnings.extend(mod_warnings)
+
+        result = CartridgeValidationResult(
+            valid=len(errors) == 0, errors=errors, warnings=warnings
+        )
+
+        spec_result = SpecificationValidator.validate(cartridge)
+        spec_dict = {
+            "compliant": spec_result.compliant,
+            "violations": [
+                {
+                    "rule": v.rule,
+                    "location": v.location,
+                    "reason": v.reason,
+                    "recommendation": v.recommendation,
+                }
+                for v in spec_result.violations
+            ],
+        }
+
+        return result, spec_dict
+
+    @classmethod
+    def _build_modules(cls, draft: PersonaDraft) -> list:
+        return [
+            IdentityModule(
+                display_name=draft.name,
+                identifier=draft.identifier,
+                summary=draft.summary,
+                description=draft.description,
+                aliases=tuple(draft.aliases),
+            ),
+            CharacterModule(
+                core_values=tuple(draft.core_values),
+                motivations=tuple(draft.motivations),
+                strengths=tuple(draft.strengths),
+                limitations=tuple(draft.limitations),
+                goals=tuple(draft.goals),
+                boundaries=tuple(draft.boundaries),
+            ),
+            PreferenceModule(
+                entries=tuple(
+                    PreferenceEntry(key=k, value=v)
+                    for k, v in sorted(draft.preferences.items())
+                ),
+            ),
+            BehaviorModule(
+                policies=tuple(
+                    BehaviorPolicy(
+                        identifier=_bid,
+                        title=r.strip(),
+                    )
+                    for r, _bid in zip(
+                        draft.behavior_rules,
+                        generate_behavior_identifiers(draft.behavior_rules),
+                    )
+                ),
+            ),
+            CommunicationModule(
+                communication_style=draft.communication_style,
+                tone=tuple(draft.tone),
+                vocabulary_preferences=tuple(draft.vocabulary_preferences),
+                response_tendencies=tuple(draft.response_tendencies),
+                formatting_preferences=tuple(draft.formatting_preferences),
+            ),
+        ]

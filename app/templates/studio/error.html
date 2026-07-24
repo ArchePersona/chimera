@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Error {{ status_code }} — CHIMERA Studio{% endblock %}
+
+{% block content %}
+<section class="error-section" aria-labelledby="error-title" style="padding: 3rem 0; text-align: center;">
+  <div class="empty-state" style="max-width: 600px; margin: 0 auto; border-color: rgba(239, 68, 68, 0.3);">
+    <div class="empty-state-icon" aria-hidden="true" style="color: #f87171;">⚠️</div>
+    <h1 id="error-title" class="banner-title" style="font-size: 2.5rem; color: #f87171; margin-bottom: 0.5rem;">
+      Error {{ status_code }}
+    </h1>
+    <p class="empty-state-desc" style="font-size: 1.1rem; color: var(--silver); margin-bottom: 1.5rem;">
+      {{ message }}
+    </p>
+    <a href="{{ base_path }}/cartridges" class="btn btn-primary">
+      Return to Studio Dashboard
+    </a>
+  </div>
+</section>
+{% endblock %}

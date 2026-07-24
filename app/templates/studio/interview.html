@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Interview Workspace — CHIMERA Studio{% endblock %}
+
+{% block content %}
+<section class="interview-section" aria-labelledby="interview-title">
+  <div class="studio-header-banner">
+    <div>
+      <h1 id="interview-title" class="banner-title">Interview Workspace</h1>
+      <p class="banner-subtitle">
+        Authoring Session ID: <code style="font-family: var(--font-mono); color: var(--gold);">{{ session_id }}</code>
+      </p>
+    </div>
+    <div class="banner-actions">
+      <a href="{{ base_path }}/cartridges" class="btn btn-secondary">&larr; Save & Exit</a>
+    </div>
+  </div>
+
+  <div class="studio-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem;">
+      <span class="badge badge-spec">Section: Identity</span>
+      <span style="font-size: 0.85rem; color: #94a3b8;">Progress: 0 / 18 Questions</span>
+    </div>
+
+    <div class="empty-state" style="border: none; padding: 2rem 0; margin: 0;">
+      <h2 style="font-size: 1.25rem; color: var(--white); margin-bottom: 0.5rem;">Guided Interview Frame</h2>
+      <p style="color: #94a3b8; max-width: 500px; margin: 0 auto 1.5rem auto;">
+        Interview workspace question rendering engine initialized for session {{ session_id }}.
+      </p>
+      <a href="{{ base_path }}/drafts/{{ session_id }}/review" class="btn btn-secondary">
+        Proceed to Draft Review &rarr;
+      </a>
+    </div>
+  </div>
+</section>
+{% endblock %}

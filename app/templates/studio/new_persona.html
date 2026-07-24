@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}New Persona — CHIMERA Studio{% endblock %}
+
+{% block content %}
+<section class="new-persona-section" aria-labelledby="new-persona-title">
+  <div class="studio-header-banner">
+    <div>
+      <h1 id="new-persona-title" class="banner-title">Create New Persona</h1>
+      <p class="banner-subtitle">
+        Launch a guided authoring interview to define a portable Persona Cartridge.
+      </p>
+    </div>
+    <div class="banner-actions">
+      <a href="{{ base_path }}/cartridges" class="btn btn-secondary">&larr; Back to Dashboard</a>
+    </div>
+  </div>
+
+  <div class="studio-card" style="max-width: 600px; margin: 0 auto;">
+    <h2 style="font-size: 1.25rem; text-align: left; margin-bottom: 1rem;">Authoring Session Setup</h2>
+    <p style="color: #94a3b8; margin-bottom: 1.5rem; font-size: 0.9rem;">
+      Click below to initialize a new interview session and begin answering questions across Identity, Character, Communication, Preferences, and Behavior.
+    </p>
+
+    <div style="display: flex; gap: 1rem;">
+      <a href="{{ base_path }}/interviews/session-preview" class="btn btn-primary" style="width: 100%;">
+        Start Guided Interview &rarr;
+      </a>
+    </div>
+  </div>
+</section>
+{% endblock %}

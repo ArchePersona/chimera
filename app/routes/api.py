@@ -22,6 +22,7 @@ from app.services.authoring_workflow import (
     SessionNotFound,
     WorkflowStateError,
 )
+from app.services.cartridge_service import CartridgeNotFoundError, LifecycleState
 from app.services.forge import CartridgeForge
 
 router = APIRouter(prefix="/api")
@@ -395,3 +396,82 @@ async def forge_session_draft(request: Request, session_id: str):
             "warnings": _serialize_warnings(result.warnings),
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Cartridge Inspector
+# ---------------------------------------------------------------------------
+
+@router.get("/cartridges/{cartridge_id}")
+async def get_cartridge(request: Request, cartridge_id: str):
+    workflow = _get_workflow(request)
+    cartridge_service = workflow.cartridge_service
+    try:
+        cartridge = cartridge_service.get_by_uuid(cartridge_id)
+    except CartridgeNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Cartridge '{cartridge_id}' not found")
+    identifier = cartridge.identity.identifier
+    lifecycle = cartridge_service.get_lifecycle_metadata(identifier)
+    source = cartridge_service.get_source_info(identifier)
+    return {
+        "cartridge": cartridge.to_dict(),
+        "lifecycle": {
+            "state": lifecycle.lifecycle_state.value,
+            "created_at": lifecycle.created_at.isoformat(),
+            "updated_at": lifecycle.updated_at.isoformat(),
+            "archived_at": lifecycle.archived_at.isoformat() if lifecycle.archived_at else None,
+            "export_count": lifecycle.export_count,
+            "tags": list(lifecycle.tags),
+            "notes": lifecycle.notes,
+        },
+        "source": source,
+    }
+
+
+@router.get("/cartridges/{cartridge_id}/validation")
+async def get_cartridge_validation(request: Request, cartridge_id: str):
+    workflow = _get_workflow(request)
+    cartridge_service = workflow.cartridge_service
+    try:
+        cartridge = cartridge_service.get_by_uuid(cartridge_id)
+    except CartridgeNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Cartridge '{cartridge_id}' not found")
+    validation_result, spec_validation = CartridgeForge.validate_cartridge(cartridge)
+    return {
+        "valid": validation_result.valid,
+        "errors": [
+            {"code": e.code.value, "field": e.field, "message": e.message}
+            for e in validation_result.errors
+        ],
+        "warnings": _serialize_warnings(validation_result.warnings),
+        "specification": spec_validation,
+    }
+
+
+@router.get("/cartridges/{cartridge_id}/versions")
+async def get_cartridge_versions(request: Request, cartridge_id: str):
+    workflow = _get_workflow(request)
+    cartridge_service = workflow.cartridge_service
+    try:
+        cartridge = cartridge_service.get_by_uuid(cartridge_id)
+    except CartridgeNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Cartridge '{cartridge_id}' not found")
+    identifier = cartridge.identity.identifier
+    versions = cartridge_service.versions(identifier)
+    return {
+        "identifier": identifier,
+        "current_version_id": cartridge_id,
+        "versions": versions,
+        "total_versions": len(versions),
+    }
+
+
+@router.get("/cartridges/{cartridge_id}/source")
+async def get_cartridge_source(request: Request, cartridge_id: str):
+    workflow = _get_workflow(request)
+    cartridge_service = workflow.cartridge_service
+    try:
+        source = cartridge_service.get_source_info_by_uuid(cartridge_id)
+    except CartridgeNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Cartridge '{cartridge_id}' not found")
+    return source

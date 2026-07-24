@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cartridge Inspector — CHIMERA Studio</title>
+    <link rel="stylesheet" href="{{ base_path }}/static/css/style.css">
+</head>
+<body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    <header class="studio-header" role="banner">
+        <div class="header-inner">
+            <a href="{{ base_path }}/" class="logo-link">
+                <span class="logo-mark" aria-hidden="true">&#9670;</span>
+                <span class="logo-text">CHIMERA <span class="logo-sub">STUDIO</span></span>
+            </a>
+            <nav class="main-nav" role="navigation" aria-label="Main navigation">
+                <ul class="nav-list">
+                    <li><a href="{{ base_path }}/" class="nav-link">Dashboard</a></li>
+                    <li><a href="{{ base_path }}/cartridges/new" class="nav-link">New Persona</a></li>
+                    <li><a href="{{ base_path }}/how-it-works" class="nav-link">How It Works</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main id="main-content" class="studio-main" role="main">
+        <div class="inspector-container" data-cartridge-id="{{ cartridge_id }}">
+            <div class="inspector-loading" id="inspector-loading">
+                <div class="loading-spinner" aria-hidden="true"></div>
+                <p>Loading cartridge…</p>
+            </div>
+
+            <div class="inspector-error hidden" id="inspector-error">
+                <div class="error-card">
+                    <h2>Cartridge Not Found</h2>
+                    <p id="error-message">The requested cartridge could not be loaded.</p>
+                    <a href="{{ base_path }}/" class="btn btn-primary">Return to Dashboard</a>
+                </div>
+            </div>
+
+            <div class="inspector-content hidden" id="inspector-content">
+                <section class="inspector-header" aria-label="Cartridge header">
+                    <div class="header-top">
+                        <a href="{{ base_path }}/" class="back-link">&larr; Dashboard</a>
+                    </div>
+                    <div class="header-main">
+                        <div class="header-info">
+                            <h1 id="cartridge-name">—</h1>
+                            <div class="header-meta">
+                                <code class="cartridge-id" id="cartridge-id" title="Cartridge UUID">—</code>
+                                <span class="lifecycle-badge" id="lifecycle-badge">Active</span>
+                            </div>
+                            <p class="cartridge-summary" id="cartridge-summary"></p>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="inspector-tabs" aria-label="Inspector sections">
+                    <div class="tab-list" role="tablist" aria-label="Cartridge modules">
+                        <button role="tab" class="tab-btn active" data-tab="identity" aria-selected="true" aria-controls="panel-identity" id="tab-identity">Identity</button>
+                        <button role="tab" class="tab-btn" data-tab="character" aria-selected="false" aria-controls="panel-character" id="tab-character">Character</button>
+                        <button role="tab" class="tab-btn" data-tab="communication" aria-selected="false" aria-controls="panel-communication" id="tab-communication">Communication</button>
+                        <button role="tab" class="tab-btn" data-tab="preferences" aria-selected="false" aria-controls="panel-preferences" id="tab-preferences">Preferences</button>
+                        <button role="tab" class="tab-btn" data-tab="behavior" aria-selected="false" aria-controls="panel-behavior" id="tab-behavior">Behavior</button>
+                        <button role="tab" class="tab-btn" data-tab="validation" aria-selected="false" aria-controls="panel-validation" id="tab-validation">Validation</button>
+                        <button role="tab" class="tab-btn" data-tab="versions" aria-selected="false" aria-controls="panel-versions" id="tab-versions">Versions</button>
+                        <button role="tab" class="tab-btn" data-tab="raw" aria-selected="false" aria-controls="panel-raw" id="tab-raw">Raw JSON</button>
+                    </div>
+                </section>
+
+                <section class="tab-panels">
+                    <div role="tabpanel" class="tab-panel active" id="panel-identity" aria-labelledby="tab-identity">
+                        <div class="panel-header">
+                            <h2>Identity Module</h2>
+                            <span class="module-status" id="identity-status"></span>
+                        </div>
+                        <div class="field-group">
+                            <label>Display Name</label>
+                            <div class="field-value" id="identity-display-name"></div>
+                        </div>
+                        <div class="field-group">
+                            <label>Persona Identifier</label>
+                            <div class="field-value mono" id="identity-identifier"></div>
+                        </div>
+                        <div class="field-group">
+                            <label>Summary</label>
+                            <div class="field-value" id="identity-summary"></div>
+                        </div>
+                        <div class="field-group">
+                            <label>Description</label>
+                            <div class="field-value" id="identity-description"></div>
+                        </div>
+                        <div class="field-group">
+                            <label>Aliases</label>
+                            <div class="field-value" id="identity-aliases"></div>
+                        </div>
+                    </div>
+
+                    <div role="tabpanel" class="tab-panel" id="panel-character" aria-labelledby="tab-character">
+                        <div class="panel-header">
+                            <h2>Character Module</h2>
+                            <span class="module-status" id="character-status"></span>
+                        </div>
+                        <div class="field-group">
+                            <label>Core Values</label>
+                            <div class="field-value" id="character-core-values"></div>
+                        </div>
+                        <div class="field-group">
+                            <label>Motivations</label>
+                            <div class="field-value" id="character-motivations"></div>
+                        </div>
+                        <div class="field-group">
+                            <label>Strengths</label>
+                            <div class="field-value" id="character-strengths"></div>
+                        </div>
+                        <div class="field-group">
+                            <label>Limitations</label>
+                            <div class="field-value" id="character-limitations"></div>
+                        </div>
+                        <div class="field-group">
+                            <label>Goals</label>
+                            <div class="field-value" id="character-goals"></div>
+                        </div>
+                        <div class="field-group">
+                            <label>Boundaries</label>
+                            <div class="field-value" id="character-boundaries"></div>
+                        </div>
+                    </div>
+
+                    <div role="tabpanel" class="tab-panel" id="panel-communication" aria-labelledby="tab-communication">
+                        <div class="panel-header">
+                            <h2>Communication Module</h2>
+                            <span class="module-status" id="communication-status"></span>
+                        </div>
+                        <div class="field-group">
+                            <label>Communication Style</label>
+                            <div class="field-value" id="communication-style"></div>
+                        </div>
+                        <div class="field-group">
+                            <label>Tone</label>
+                            <div class="field-value" id="communication-tone"></div>
+                        </div>
+                        <div class="field-group">
+                            <label>Vocabulary Preferences</label>
+                            <div class="field-value" id="communication-vocabulary"></div>
+                        </div>
+                        <div class="field-group">
+                            <label>Response Tendencies</label>
+                            <div class="field-value" id="communication-responses"></div>
+                        </div>
+                        <div class="field-group">
+                            <label>Formatting Preferences</label>
+                            <div class="field-value" id="communication-formatting"></div>
+                        </div>
+                    </div>
+
+                    <div role="tabpanel" class="tab-panel" id="panel-preferences" aria-labelledby="tab-preferences">
+                        <div class="panel-header">
+                            <h2>Preference Module</h2>
+                            <span class="module-status" id="preferences-status"></span>
+                        </div>
+                        <div class="preference-table-wrap">
+                            <table class="preference-table" id="preference-table">
+                                <thead>
+                                    <tr><th>Key</th><th>Value</th></tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div role="tabpanel" class="tab-panel" id="panel-behavior" aria-labelledby="tab-behavior">
+                        <div class="panel-header">
+                            <h2>Behavior Module</h2>
+                            <span class="module-status" id="behavior-status"></span>
+                        </div>
+                        <div class="behavior-policies" id="behavior-policies"></div>
+                    </div>
+
+                    <div role="tabpanel" class="tab-panel" id="panel-validation" aria-labelledby="tab-validation">
+                        <div class="panel-header">
+                            <h2>Validation Status</h2>
+                        </div>
+                        <div class="validation-loading" id="validation-loading">
+                            <div class="loading-spinner" aria-hidden="true"></div>
+                            <p>Running validation…</p>
+                        </div>
+                        <div class="validation-results hidden" id="validation-results">
+                            <div class="validation-summary" id="validation-summary"></div>
+                            <div class="validation-section" id="validation-errors-section">
+                                <h3>Errors</h3>
+                                <ul class="validation-list" id="validation-errors"></ul>
+                            </div>
+                            <div class="validation-section" id="validation-warnings-section">
+                                <h3>Warnings</h3>
+                                <ul class="validation-list" id="validation-warnings"></ul>
+                            </div>
+                            <div class="validation-section" id="validation-spec-section">
+                                <h3>Specification Compliance</h3>
+                                <div id="validation-spec"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div role="tabpanel" class="tab-panel" id="panel-versions" aria-labelledby="tab-versions">
+                        <div class="panel-header">
+                            <h2>Version History</h2>
+                        </div>
+                        <div class="versions-loading" id="versions-loading">
+                            <div class="loading-spinner" aria-hidden="true"></div>
+                            <p>Loading versions…</p>
+                        </div>
+                        <div class="versions-content hidden" id="versions-content">
+                            <div class="versions-summary" id="versions-summary"></div>
+                            <div class="version-list" id="version-list"></div>
+                        </div>
+                    </div>
+
+                    <div role="tabpanel" class="tab-panel" id="panel-raw" aria-labelledby="tab-raw">
+                        <div class="panel-header">
+                            <h2>Raw JSON</h2>
+                            <button class="btn btn-sm" id="raw-copy-btn">Copy</button>
+                        </div>
+                        <pre class="raw-json" id="raw-json"><code></code></pre>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <footer class="studio-footer" role="contentinfo">
+        <div class="footer-inner">
+            <span class="footer-brand">CHIMERA Studio</span>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-version">Cartridge Inspector</span>
+        </div>
+    </footer>
+
+    <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+    <script src="{{ base_path }}/static/js/inspector.js"></script>
+</body>
+</html>

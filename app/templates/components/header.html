@@ -1,10 +1,57 @@
-<header class="site-header">
-  <nav class="container">
-    <a href="/" class="logo">CHIMERA</a>
-    <div class="nav-links">
-      <a href="/#what">What is CHIMERA?</a>
-      <a href="/build">Build</a>
-      <a href="/#faq">FAQ</a>
+<header class="site-header" role="banner">
+  <div class="studio-container header-container">
+    <div class="brand-group">
+      <a href="{{ base_path }}/cartridges" class="logo-link" aria-label="CHIMERA Studio Home">
+        <span class="logo">CHIMERA</span>
+        <span class="studio-badge">STUDIO</span>
+      </a>
     </div>
-  </nav>
+
+    <!-- Mobile Menu Toggle Button -->
+    <button 
+      type="button" 
+      class="mobile-menu-toggle" 
+      id="mobile-menu-toggle"
+      aria-label="Toggle navigation menu" 
+      aria-expanded="false" 
+      aria-controls="primary-nav"
+    >
+      <span class="hamburger-line"></span>
+      <span class="hamburger-line"></span>
+      <span class="hamburger-line"></span>
+    </button>
+
+    <!-- Primary Navigation -->
+    <nav class="primary-nav" id="primary-nav" role="navigation" aria-label="Primary navigation">
+      <ul class="nav-links">
+        <li>
+          <a 
+            href="{{ base_path }}/cartridges" 
+            class="nav-link {% if current_route in ['/', '/cartridges'] %}active{% endif %}"
+            {% if current_route in ['/', '/cartridges'] %}aria-current="page"{% endif %}
+          >
+            Dashboard
+          </a>
+        </li>
+        <li>
+          <a 
+            href="{{ base_path }}/cartridges/new" 
+            class="nav-link nav-btn-primary {% if current_route == '/cartridges/new' %}active{% endif %}"
+            {% if current_route == '/cartridges/new' %}aria-current="page"{% endif %}
+          >
+            <span class="btn-icon">+</span> New Persona
+          </a>
+        </li>
+        <li>
+          <a 
+            href="{{ base_path }}/how-it-works" 
+            class="nav-link {% if current_route == '/how-it-works' %}active{% endif %}"
+            {% if current_route == '/how-it-works' %}aria-current="page"{% endif %}
+          >
+            Documentation
+          </a>
+        </li>
+      </ul>
+    </nav>
+  </div>
 </header>

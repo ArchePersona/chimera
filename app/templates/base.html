@@ -1,24 +1,48 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}CHIMERA — Persona Creation Engine{% endblock %}</title>
+  <meta name="description" content="CHIMERA Studio — Canonical Persona Creation Engine for ArchePersona">
+  <title>{% block title %}CHIMERA Studio — Persona Creation Engine{% endblock %}</title>
+  
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  
   <link rel="stylesheet" href="{{ url_for('static', path='css/style.css') }}">
 </head>
-<body>
+<body class="studio-shell">
 
+  <!-- Accessibility Skip Link -->
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+
+  <!-- Application Shell Header -->
   {% include "components/header.html" %}
 
-  <main>
-    {% block content %}{% endblock %}
+  <!-- Global Toast Notification Container -->
+  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Global Loading Indicator -->
+  <div id="global-loading" class="loading-overlay" aria-hidden="true" style="display: none;">
+    <div class="loading-spinner-box">
+      <div class="loading-spinner" role="status"></div>
+      <span class="loading-text">Loading CHIMERA Studio...</span>
+    </div>
+  </div>
+
+  <!-- Main Content Container -->
+  <main id="main-content" class="studio-main" tabindex="-1">
+    <div class="studio-container">
+      {% block content %}{% endblock %}
+    </div>
   </main>
 
+  <!-- Application Shell Footer -->
   {% include "components/footer.html" %}
 
   <script src="{{ url_for('static', path='js/main.js') }}"></script>
+  <script src="{{ url_for('static', path='js/studio.js') }}"></script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>
