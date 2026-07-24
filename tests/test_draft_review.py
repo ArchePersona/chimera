@@ -1,4 +1,4 @@
-"""Tests for Assignment 004 — Interview API, Draft Review, and Forge Pipeline."""
+﻿"""Tests for Assignment 004 — Interview API, Draft Review, and Forge Pipeline."""
 
 import pytest
 
@@ -7,6 +7,12 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.identity.signing import sign_handshake, encode_handshake
+
+
+def _auth_headers():
+    token = encode_handshake(sign_handshake("chimera-dev-secret", "test-user"))
+    return {"X-Identity-Handshake": token}
 
 client = TestClient(app)
 
@@ -29,7 +35,7 @@ REQUIRED_ANSWERS = [
 
 
 def _create_session() -> str:
-    r = client.post("/api/sessions")
+    r = client.post("/api/sessions", headers=_auth_headers())
     assert r.status_code == 200
     return r.json()["session_id"]
 
@@ -39,6 +45,7 @@ def _answer_all_required(session_id: str) -> None:
         r = client.post(
             f"/api/sessions/{session_id}/answers",
             json={"question_id": qid, "value": val},
+            headers=_auth_headers(),
         )
         assert r.status_code == 200, f"Failed to answer {qid}: {r.text}"
 
@@ -50,14 +57,14 @@ def _answer_all_required(session_id: str) -> None:
 
 class TestSessionCreation:
     def test_create_session_returns_200(self):
-        r = client.post("/api/sessions")
+        r = client.post("/api/sessions", headers=_auth_headers())
         assert r.status_code == 200
         data = r.json()
         assert "session_id" in data
         assert data["state"] == "created"
 
     def test_create_session_returns_progress(self):
-        r = client.post("/api/sessions")
+        r = client.post("/api/sessions", headers=_auth_headers())
         data = r.json()
         assert "progress" in data
         assert data["progress"]["total_questions"] == 18
@@ -65,7 +72,7 @@ class TestSessionCreation:
 
     def test_create_session_with_template(self):
         template = {"name": "Test Persona", "identifier": "test-persona"}
-        r = client.post("/api/sessions", json={"template": template})
+        r = client.post("/api/sessions", json={"template": template}, headers=_auth_headers())
         assert r.status_code == 200
         data = r.json()
         assert data["state"] == "created"
@@ -74,7 +81,7 @@ class TestSessionCreation:
 class TestGetSession:
     def test_get_session_returns_200(self):
         sid = _create_session()
-        r = client.get(f"/api/sessions/{sid}")
+        r = client.get(f"/api/sessions/{sid}", headers=_auth_headers())
         assert r.status_code == 200
         data = r.json()
         assert data["session_id"] == sid
@@ -82,7 +89,7 @@ class TestGetSession:
         assert data["ready_to_forge"] is False
 
     def test_get_session_not_found(self):
-        r = client.get("/api/sessions/nonexistent-id")
+        r = client.get("/api/sessions/nonexistent-id", headers=_auth_headers())
         assert r.status_code == 404
 
 
@@ -94,7 +101,7 @@ class TestGetSession:
 class TestGetQuestions:
     def test_get_questions_returns_available(self):
         sid = _create_session()
-        r = client.get(f"/api/sessions/{sid}/questions")
+        r = client.get(f"/api/sessions/{sid}/questions", headers=_auth_headers())
         assert r.status_code == 200
         data = r.json()
         assert "available" in data
@@ -103,7 +110,7 @@ class TestGetQuestions:
         assert data["current"]["identifier"] == "identity_name"
 
     def test_get_questions_not_found(self):
-        r = client.get("/api/sessions/nonexistent/questions")
+        r = client.get("/api/sessions/nonexistent/questions", headers=_auth_headers())
         assert r.status_code == 404
 
 
@@ -113,6 +120,7 @@ class TestSubmitAnswer:
         r = client.post(
             f"/api/sessions/{sid}/answers",
             json={"question_id": "identity_name", "value": "Atlas"},
+            headers=_auth_headers(),
         )
         assert r.status_code == 200
         data = r.json()
@@ -124,6 +132,7 @@ class TestSubmitAnswer:
         r = client.post(
             f"/api/sessions/{sid}/answers",
             json={"question_id": "identity_name", "value": "Atlas"},
+            headers=_auth_headers(),
         )
         progress = r.json()["progress"]
         assert progress["answered_questions"] == 1
@@ -133,14 +142,16 @@ class TestSubmitAnswer:
         client.post(
             f"/api/sessions/{sid}/answers",
             json={"question_id": "identity_name", "value": "Atlas"},
+            headers=_auth_headers(),
         )
-        r = client.get(f"/api/sessions/{sid}")
+        r = client.get(f"/api/sessions/{sid}", headers=_auth_headers())
         assert r.json()["state"] == "in_progress"
 
     def test_submit_answer_not_found(self):
         r = client.post(
             "/api/sessions/nonexistent/answers",
             json={"question_id": "identity_name", "value": "Atlas"},
+            headers=_auth_headers(),
         )
         assert r.status_code == 404
 
@@ -149,6 +160,7 @@ class TestSubmitAnswer:
         r = client.post(
             f"/api/sessions/{sid}/answers",
             json={"question_id": "character_core_values", "value": ["wisdom"]},
+            headers=_auth_headers(),
         )
         assert r.status_code == 409
 
@@ -157,6 +169,7 @@ class TestSubmitAnswer:
         r = client.post(
             f"/api/sessions/{sid}/answers",
             json={"question_id": "identity_name", "value": ""},
+            headers=_auth_headers(),
         )
         assert r.status_code == 422
 
@@ -165,6 +178,7 @@ class TestSubmitAnswer:
         r = client.post(
             f"/api/sessions/{sid}/answers",
             json={"question_id": "identity_name", "value": 123},
+            headers=_auth_headers(),
         )
         assert r.status_code == 422
 
@@ -172,14 +186,15 @@ class TestSubmitAnswer:
 class TestSkipQuestion:
     def test_skip_optional_question(self):
         sid = _create_session()
-        # identity_description depends on identity_name being answered first
         client.post(
             f"/api/sessions/{sid}/answers",
             json={"question_id": "identity_name", "value": "Atlas"},
+            headers=_auth_headers(),
         )
         r = client.post(
             f"/api/sessions/{sid}/skip",
             json={"question_id": "identity_description"},
+            headers=_auth_headers(),
         )
         assert r.status_code == 200
         assert r.json()["accepted"] is True
@@ -189,6 +204,7 @@ class TestSkipQuestion:
         r = client.post(
             f"/api/sessions/{sid}/skip",
             json={"question_id": "identity_name"},
+            headers=_auth_headers(),
         )
         assert r.status_code == 422
 
@@ -197,6 +213,7 @@ class TestSkipQuestion:
         r = client.post(
             f"/api/sessions/{sid}/skip",
             json={"question_id": "identity_description"},
+            headers=_auth_headers(),
         )
         assert r.status_code == 409
 
@@ -204,19 +221,19 @@ class TestSkipQuestion:
 class TestCompleteSession:
     def test_complete_session(self):
         sid = _create_session()
-        r = client.post(f"/api/sessions/{sid}/complete")
+        r = client.post(f"/api/sessions/{sid}/complete", headers=_auth_headers())
         assert r.status_code == 200
         assert r.json()["completed"] is True
 
     def test_complete_session_not_found(self):
-        r = client.post("/api/sessions/nonexistent/complete")
+        r = client.post("/api/sessions/nonexistent/complete", headers=_auth_headers())
         assert r.status_code == 404
 
 
 class TestProgress:
     def test_progress_initial(self):
         sid = _create_session()
-        r = client.get(f"/api/sessions/{sid}/progress")
+        r = client.get(f"/api/sessions/{sid}/progress", headers=_auth_headers())
         assert r.status_code == 200
         data = r.json()
         assert data["answered_questions"] == 0
@@ -227,8 +244,9 @@ class TestProgress:
         client.post(
             f"/api/sessions/{sid}/answers",
             json={"question_id": "identity_name", "value": "Atlas"},
+            headers=_auth_headers(),
         )
-        r = client.get(f"/api/sessions/{sid}/progress")
+        r = client.get(f"/api/sessions/{sid}/progress", headers=_auth_headers())
         data = r.json()
         assert data["answered_questions"] == 1
 
@@ -244,8 +262,9 @@ class TestDraftReview:
         client.post(
             f"/api/sessions/{sid}/answers",
             json={"question_id": "identity_name", "value": "Atlas"},
+            headers=_auth_headers(),
         )
-        r = client.get(f"/api/sessions/{sid}/draft")
+        r = client.get(f"/api/sessions/{sid}/draft", headers=_auth_headers())
         assert r.status_code == 200
         data = r.json()
         assert data["session_id"] == sid
@@ -253,12 +272,12 @@ class TestDraftReview:
         assert data["ready_to_forge"] is False
 
     def test_get_draft_not_found(self):
-        r = client.get("/api/sessions/nonexistent/draft")
+        r = client.get("/api/sessions/nonexistent/draft", headers=_auth_headers())
         assert r.status_code == 404
 
     def test_draft_includes_all_fields(self):
         sid = _create_session()
-        r = client.get(f"/api/sessions/{sid}/draft")
+        r = client.get(f"/api/sessions/{sid}/draft", headers=_auth_headers())
         draft = r.json()["draft"]
         expected_fields = [
             "name", "identifier", "summary", "description", "aliases",
@@ -272,7 +291,7 @@ class TestDraftReview:
 
     def test_draft_readiness_issues_present(self):
         sid = _create_session()
-        r = client.get(f"/api/sessions/{sid}/draft")
+        r = client.get(f"/api/sessions/{sid}/draft", headers=_auth_headers())
         data = r.json()
         assert "readiness_issues" in data
         assert len(data["readiness_issues"]) > 0
@@ -281,7 +300,7 @@ class TestDraftReview:
 class TestValidateSessionDraft:
     def test_validate_empty_draft(self):
         sid = _create_session()
-        r = client.post(f"/api/sessions/{sid}/validate")
+        r = client.post(f"/api/sessions/{sid}/validate", headers=_auth_headers())
         assert r.status_code == 200
         data = r.json()
         assert data["valid"] is False
@@ -290,22 +309,21 @@ class TestValidateSessionDraft:
     def test_validate_complete_draft(self):
         sid = _create_session()
         _answer_all_required(sid)
-        r = client.post(f"/api/sessions/{sid}/validate")
+        r = client.post(f"/api/sessions/{sid}/validate", headers=_auth_headers())
         assert r.status_code == 200
         data = r.json()
         assert data["valid"] is True
         assert len(data["errors"]) == 0
 
     def test_validate_not_found(self):
-        r = client.post("/api/sessions/nonexistent/validate")
+        r = client.post("/api/sessions/nonexistent/validate", headers=_auth_headers())
         assert r.status_code == 404
 
     def test_validate_warnings_not_blocking(self):
         sid = _create_session()
         _answer_all_required(sid)
-        r = client.post(f"/api/sessions/{sid}/validate")
+        r = client.post(f"/api/sessions/{sid}/validate", headers=_auth_headers())
         data = r.json()
-        # Warnings should not make valid=False
         assert data["valid"] is True
 
 
@@ -320,14 +338,15 @@ class TestForgeSession:
         client.post(
             f"/api/sessions/{sid}/answers",
             json={"question_id": "identity_name", "value": "Atlas"},
+            headers=_auth_headers(),
         )
-        r = client.post(f"/api/sessions/{sid}/forge")
+        r = client.post(f"/api/sessions/{sid}/forge", headers=_auth_headers())
         assert r.status_code == 409
 
     def test_forge_complete_session_succeeds(self):
         sid = _create_session()
         _answer_all_required(sid)
-        r = client.post(f"/api/sessions/{sid}/forge")
+        r = client.post(f"/api/sessions/{sid}/forge", headers=_auth_headers())
         assert r.status_code == 200
         data = r.json()
         assert data["success"] is True
@@ -335,22 +354,22 @@ class TestForgeSession:
         assert data["session_preserved"] is True
 
     def test_forge_not_found(self):
-        r = client.post("/api/sessions/nonexistent/forge")
+        r = client.post("/api/sessions/nonexistent/forge", headers=_auth_headers())
         assert r.status_code == 404
 
     def test_session_preserved_after_forge(self):
         sid = _create_session()
         _answer_all_required(sid)
-        client.post(f"/api/sessions/{sid}/forge")
-        r = client.get(f"/api/sessions/{sid}")
+        client.post(f"/api/sessions/{sid}/forge", headers=_auth_headers())
+        r = client.get(f"/api/sessions/{sid}", headers=_auth_headers())
         assert r.status_code == 200
         assert r.json()["state"] == "ready_to_forge"
 
     def test_draft_still_accessible_after_forge(self):
         sid = _create_session()
         _answer_all_required(sid)
-        client.post(f"/api/sessions/{sid}/forge")
-        r = client.get(f"/api/sessions/{sid}/draft")
+        client.post(f"/api/sessions/{sid}/forge", headers=_auth_headers())
+        r = client.get(f"/api/sessions/{sid}/draft", headers=_auth_headers())
         assert r.status_code == 200
         assert r.json()["draft"]["name"] == "Atlas"
 
@@ -399,39 +418,31 @@ class TestDraftReviewPage:
 
 class TestEndToEndFlow:
     def test_create_answer_review_validate_forge(self):
-        # 1. Create session
-        r = client.post("/api/sessions")
+        r = client.post("/api/sessions", headers=_auth_headers())
         sid = r.json()["session_id"]
         assert r.json()["state"] == "created"
 
-        # 2. Answer all required questions
         _answer_all_required(sid)
 
-        # 3. Verify readiness
-        r = client.get(f"/api/sessions/{sid}")
+        r = client.get(f"/api/sessions/{sid}", headers=_auth_headers())
         assert r.json()["ready_to_forge"] is True
         assert r.json()["state"] == "ready_to_forge"
 
-        # 4. Review draft
-        r = client.get(f"/api/sessions/{sid}/draft")
+        r = client.get(f"/api/sessions/{sid}/draft", headers=_auth_headers())
         assert r.json()["draft"]["name"] == "Atlas"
         assert r.json()["draft"]["identifier"] == "atlas"
 
-        # 5. Validate
-        r = client.post(f"/api/sessions/{sid}/validate")
+        r = client.post(f"/api/sessions/{sid}/validate", headers=_auth_headers())
         assert r.json()["valid"] is True
 
-        # 6. Forge
-        r = client.post(f"/api/sessions/{sid}/forge")
+        r = client.post(f"/api/sessions/{sid}/forge", headers=_auth_headers())
         assert r.json()["success"] is True
         assert r.json()["cartridge"]["identity"]["display_name"] == "Atlas"
 
-        # 7. Session preserved
-        r = client.get(f"/api/sessions/{sid}")
+        r = client.get(f"/api/sessions/{sid}", headers=_auth_headers())
         assert r.json()["state"] == "ready_to_forge"
 
-        # 8. Draft still accessible
-        r = client.get(f"/api/sessions/{sid}/draft")
+        r = client.get(f"/api/sessions/{sid}/draft", headers=_auth_headers())
         assert r.json()["draft"]["name"] == "Atlas"
 
 
@@ -442,7 +453,7 @@ class TestEndToEndFlow:
 
 class TestApiErrorFormat:
     def test_404_returns_json(self):
-        r = client.get("/api/sessions/nonexistent")
+        r = client.get("/api/sessions/nonexistent", headers=_auth_headers())
         assert r.status_code == 404
         assert r.headers["content-type"].startswith("application/json")
 
@@ -451,6 +462,7 @@ class TestApiErrorFormat:
         r = client.post(
             f"/api/sessions/{sid}/answers",
             json={"question_id": "character_core_values", "value": ["wisdom"]},
+            headers=_auth_headers(),
         )
         assert r.status_code == 409
         assert r.headers["content-type"].startswith("application/json")
@@ -460,6 +472,7 @@ class TestApiErrorFormat:
         r = client.post(
             f"/api/sessions/{sid}/answers",
             json={"question_id": "identity_name", "value": ""},
+            headers=_auth_headers(),
         )
         assert r.status_code == 422
         assert r.headers["content-type"].startswith("application/json")

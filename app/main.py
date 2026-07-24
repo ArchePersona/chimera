@@ -3,13 +3,38 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.config import STATIC_DIR
+from app.config import CHIMERA_ENV, DATA_DIR, IDENTITY_HMAC_SECRET, STATIC_DIR
+from app.identity.dev_provider import DevIdentityProvider
+from app.identity.middleware import IdentityMiddleware
+from app.interview.engine import InterviewEngine
+from app.repositories.cartridge_repository import CartridgeRepository
+from app.repositories.session_repository import SessionRepository
+from app.repositories.storage import FilesystemStorage
 from app.routes import api, web
 from app.services.authoring_workflow import AuthoringWorkflow
+from app.services.cartridge_service import CartridgeService
 from app.templating import env
 
+# --- Bootstrap persistence layer ---
+_storage = FilesystemStorage(DATA_DIR)
+_engine = InterviewEngine()
+_session_repo = SessionRepository(_storage, _engine)
+_cartridge_repo = CartridgeRepository(_storage)
+_cartridge_svc = CartridgeService(repo=_cartridge_repo)
+_workflow = AuthoringWorkflow(
+    interview_engine=_engine,
+    cartridge_service=_cartridge_svc,
+    session_repo=_session_repo,
+)
+
+# --- App setup ---
 app = FastAPI(title="CHIMERA Studio", version="1.0.0")
-app.state.workflow = AuthoringWorkflow()
+app.state.workflow = _workflow
+
+# --- Identity middleware ---
+_provider = DevIdentityProvider(secret=IDENTITY_HMAC_SECRET)
+app.add_middleware(IdentityMiddleware, provider=_provider)
+
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 app.include_router(web.router)

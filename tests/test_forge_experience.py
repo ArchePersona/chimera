@@ -7,6 +7,12 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.identity.signing import sign_handshake, encode_handshake
+
+
+def _auth_headers():
+    token = encode_handshake(sign_handshake("chimera-dev-secret", "test-user"))
+    return {"X-Identity-Handshake": token}
 
 client = TestClient(app)
 
@@ -29,7 +35,7 @@ REQUIRED_ANSWERS = [
 
 
 def _create_session() -> str:
-    r = client.post("/api/sessions")
+    r = client.post("/api/sessions", headers=_auth_headers())
     assert r.status_code == 200
     return r.json()["session_id"]
 
@@ -39,13 +45,14 @@ def _answer_all_required(session_id: str) -> None:
         r = client.post(
             f"/api/sessions/{session_id}/answers",
             json={"question_id": qid, "value": val},
+            headers=_auth_headers(),
         )
         assert r.status_code == 200, f"Failed to answer {qid}: {r.text}"
 
 
 def _forge_session(session_id: str) -> dict:
     _answer_all_required(session_id)
-    r = client.post(f"/api/sessions/{session_id}/forge")
+    r = client.post(f"/api/sessions/{session_id}/forge", headers=_auth_headers())
     assert r.status_code == 200
     return r.json()
 
@@ -109,8 +116,8 @@ class TestForgeIdempotency:
     def test_repeated_forge_creates_new_cartridge(self):
         sid = _create_session()
         _answer_all_required(sid)
-        r1 = client.post(f"/api/sessions/{sid}/forge")
-        r2 = client.post(f"/api/sessions/{sid}/forge")
+        r1 = client.post(f"/api/sessions/{sid}/forge", headers=_auth_headers())
+        r2 = client.post(f"/api/sessions/{sid}/forge", headers=_auth_headers())
         # Second forge may succeed (creating a new version) or fail
         if r2.status_code == 200:
             # Each forge creates a new cartridge with a unique ID
@@ -123,9 +130,9 @@ class TestForgeIdempotency:
     def test_forge_after_complete_does_not_duplicate(self):
         sid = _create_session()
         _answer_all_required(sid)
-        client.post(f"/api/sessions/{sid}/forge")
+        client.post(f"/api/sessions/{sid}/forge", headers=_auth_headers())
         # Try forge again — should either return same result or error
-        r = client.post(f"/api/sessions/{sid}/forge")
+        r = client.post(f"/api/sessions/{sid}/forge", headers=_auth_headers())
         # Either succeeds (idempotent) or fails cleanly
         assert r.status_code in (200, 409)
 
@@ -138,7 +145,7 @@ class TestForgeIdempotency:
 class TestForgeIncompleteRejection:
     def test_forge_empty_session_rejected(self):
         sid = _create_session()
-        r = client.post(f"/api/sessions/{sid}/forge")
+        r = client.post(f"/api/sessions/{sid}/forge", headers=_auth_headers())
         assert r.status_code == 409
 
     def test_forge_partial_session_rejected(self):
@@ -146,13 +153,14 @@ class TestForgeIncompleteRejection:
         client.post(
             f"/api/sessions/{sid}/answers",
             json={"question_id": "identity_name", "value": "Atlas"},
+            headers=_auth_headers(),
         )
-        r = client.post(f"/api/sessions/{sid}/forge")
+        r = client.post(f"/api/sessions/{sid}/forge", headers=_auth_headers())
         assert r.status_code == 409
 
     def test_forge_rejection_includes_error_type(self):
         sid = _create_session()
-        r = client.post(f"/api/sessions/{sid}/forge")
+        r = client.post(f"/api/sessions/{sid}/forge", headers=_auth_headers())
         assert r.status_code == 409
         data = r.json()
         assert "INTERVIEW_INCOMPLETE" in str(data) or "detail" in data
@@ -166,7 +174,7 @@ class TestForgeIncompleteRejection:
 class TestForgeValidationFailure:
     def test_validate_before_forge_shows_errors(self):
         sid = _create_session()
-        r = client.post(f"/api/sessions/{sid}/validate")
+        r = client.post(f"/api/sessions/{sid}/validate", headers=_auth_headers())
         assert r.status_code == 200
         assert r.json()["valid"] is False
         assert len(r.json()["errors"]) > 0
@@ -174,13 +182,13 @@ class TestForgeValidationFailure:
     def test_validate_complete_draft_passes(self):
         sid = _create_session()
         _answer_all_required(sid)
-        r = client.post(f"/api/sessions/{sid}/validate")
+        r = client.post(f"/api/sessions/{sid}/validate", headers=_auth_headers())
         assert r.status_code == 200
         assert r.json()["valid"] is True
 
     def test_validation_errors_are_field_level(self):
         sid = _create_session()
-        r = client.post(f"/api/sessions/{sid}/validate")
+        r = client.post(f"/api/sessions/{sid}/validate", headers=_auth_headers())
         for error in r.json()["errors"]:
             assert "field" in error
             assert "message" in error
@@ -194,23 +202,23 @@ class TestForgeValidationFailure:
 
 class TestForgeBackendErrors:
     def test_forge_nonexistent_session(self):
-        r = client.post("/api/sessions/nonexistent/forge")
+        r = client.post("/api/sessions/nonexistent/forge", headers=_auth_headers())
         assert r.status_code == 404
 
     def test_forge_cancelled_session(self):
         sid = _create_session()
         _answer_all_required(sid)
-        client.post(f"/api/sessions/{sid}/complete")
-        r = client.post(f"/api/sessions/{sid}/forge")
+        client.post(f"/api/sessions/{sid}/complete", headers=_auth_headers())
+        r = client.post(f"/api/sessions/{sid}/forge", headers=_auth_headers())
         # Completed sessions may be rejected or handled
         assert r.status_code in (409, 200)
 
     def test_error_response_is_json(self):
-        r = client.post("/api/sessions/nonexistent/forge")
+        r = client.post("/api/sessions/nonexistent/forge", headers=_auth_headers())
         assert r.headers["content-type"].startswith("application/json")
 
     def test_error_response_has_message(self):
-        r = client.post("/api/sessions/nonexistent/forge")
+        r = client.post("/api/sessions/nonexistent/forge", headers=_auth_headers())
         data = r.json()
         assert "detail" in data or "message" in data
 
@@ -224,27 +232,27 @@ class TestSessionStateAfterForge:
     def test_session_preserved(self):
         sid = _create_session()
         _forge_session(sid)
-        r = client.get(f"/api/sessions/{sid}")
+        r = client.get(f"/api/sessions/{sid}", headers=_auth_headers())
         assert r.status_code == 200
         assert r.json()["session_id"] == sid
 
     def test_session_state_unchanged(self):
         sid = _create_session()
         _forge_session(sid)
-        r = client.get(f"/api/sessions/{sid}")
+        r = client.get(f"/api/sessions/{sid}", headers=_auth_headers())
         assert r.json()["state"] == "ready_to_forge"
 
     def test_draft_still_accessible(self):
         sid = _create_session()
         _forge_session(sid)
-        r = client.get(f"/api/sessions/{sid}/draft")
+        r = client.get(f"/api/sessions/{sid}/draft", headers=_auth_headers())
         assert r.status_code == 200
         assert r.json()["draft"]["name"] == "Atlas"
 
     def test_progress_still_accessible(self):
         sid = _create_session()
         _forge_session(sid)
-        r = client.get(f"/api/sessions/{sid}/progress")
+        r = client.get(f"/api/sessions/{sid}/progress", headers=_auth_headers())
         assert r.status_code == 200
 
 
@@ -375,7 +383,7 @@ class TestFrontendDoesNotGenerateIdentifiers:
 class TestForgeReadinessBackendAuthoritative:
     def test_readiness_from_session_endpoint(self):
         sid = _create_session()
-        r = client.get(f"/api/sessions/{sid}")
+        r = client.get(f"/api/sessions/{sid}", headers=_auth_headers())
         data = r.json()
         assert "ready_to_forge" in data
         assert "readiness_issues" in data
@@ -384,14 +392,14 @@ class TestForgeReadinessBackendAuthoritative:
     def test_readiness_after_all_required(self):
         sid = _create_session()
         _answer_all_required(sid)
-        r = client.get(f"/api/sessions/{sid}")
+        r = client.get(f"/api/sessions/{sid}", headers=_auth_headers())
         assert r.json()["ready_to_forge"] is True
         assert len(r.json()["readiness_issues"]) == 0
 
     def test_draft_endpoint_includes_readiness(self):
         sid = _create_session()
         _answer_all_required(sid)
-        r = client.get(f"/api/sessions/{sid}/draft")
+        r = client.get(f"/api/sessions/{sid}/draft", headers=_auth_headers())
         data = r.json()
         assert "ready_to_forge" in data
         assert data["ready_to_forge"] is True
@@ -399,7 +407,7 @@ class TestForgeReadinessBackendAuthoritative:
     def test_validate_endpoint_includes_readiness(self):
         sid = _create_session()
         _answer_all_required(sid)
-        r = client.post(f"/api/sessions/{sid}/validate")
+        r = client.post(f"/api/sessions/{sid}/validate", headers=_auth_headers())
         # Validation result has valid/errors/warnings
         assert "valid" in r.json()
 
@@ -440,19 +448,19 @@ class TestEndToEndForgeFlow:
         _answer_all_required(sid)
 
         # 3. Verify readiness
-        r = client.get(f"/api/sessions/{sid}")
+        r = client.get(f"/api/sessions/{sid}", headers=_auth_headers())
         assert r.json()["ready_to_forge"] is True
 
         # 4. Review draft
-        r = client.get(f"/api/sessions/{sid}/draft")
+        r = client.get(f"/api/sessions/{sid}/draft", headers=_auth_headers())
         assert r.json()["draft"]["name"] == "Atlas"
 
         # 5. Validate
-        r = client.post(f"/api/sessions/{sid}/validate")
+        r = client.post(f"/api/sessions/{sid}/validate", headers=_auth_headers())
         assert r.json()["valid"] is True
 
         # 6. Forge
-        r = client.post(f"/api/sessions/{sid}/forge")
+        r = client.post(f"/api/sessions/{sid}/forge", headers=_auth_headers())
         assert r.json()["success"] is True
 
         # 7. Verify cartridge
@@ -462,11 +470,11 @@ class TestEndToEndForgeFlow:
         assert cartridge["manifest"]["schema_version"] == "0.6.0"
 
         # 8. Session preserved
-        r = client.get(f"/api/sessions/{sid}")
+        r = client.get(f"/api/sessions/{sid}", headers=_auth_headers())
         assert r.json()["state"] == "ready_to_forge"
 
         # 9. Draft still accessible
-        r = client.get(f"/api/sessions/{sid}/draft")
+        r = client.get(f"/api/sessions/{sid}/draft", headers=_auth_headers())
         assert r.json()["draft"]["name"] == "Atlas"
 
         # 10. Inspector accessible

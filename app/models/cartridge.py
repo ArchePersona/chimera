@@ -835,6 +835,103 @@ class PersonaCartridge:
         d["status"] = self.status.value
         return d
 
+    @classmethod
+    def from_dict(cls, data: dict) -> "PersonaCartridge":
+        """Reconstruct a PersonaCartridge from a to_dict()-compatible dict."""
+        from datetime import datetime, timezone
+
+        m = data["manifest"]
+        manifest = CartridgeManifest(
+            cartridge_id=m["cartridge_id"],
+            schema_name=m.get("schema_name", SCHEMA_NAME),
+            schema_version=m.get("schema_version", SCHEMA_VERSION),
+            specification_version=m.get("specification_version", "1.0.0"),
+            created_at=datetime.fromisoformat(m["created_at"]),
+            updated_at=datetime.fromisoformat(m["updated_at"]),
+        )
+
+        id_data = data["identity"]
+        identity = IdentityModule(
+            display_name=id_data["display_name"],
+            identifier=id_data["identifier"],
+            summary=id_data["summary"],
+            description=id_data.get("description", ""),
+            aliases=tuple(id_data.get("aliases", [])),
+        )
+
+        ch_data = data["character"]
+        character = CharacterModule(
+            core_values=tuple(ch_data.get("core_values", [])),
+            motivations=tuple(ch_data.get("motivations", [])),
+            strengths=tuple(ch_data.get("strengths", [])),
+            limitations=tuple(ch_data.get("limitations", [])),
+            goals=tuple(ch_data.get("goals", [])),
+            boundaries=tuple(ch_data.get("boundaries", [])),
+        )
+
+        pref_data = data.get("preferences", {})
+        entries = []
+        for e in pref_data.get("entries", []):
+            entries.append(PreferenceEntry(
+                key=e["key"],
+                value=e["value"],
+                scope=e.get("scope", "global"),
+                priority=e.get("priority", "normal"),
+                description=e.get("description", ""),
+            ))
+        preferences = PreferenceModule(entries=tuple(entries))
+
+        beh_data = data.get("behavior", {})
+        policies = []
+        for p in beh_data.get("policies", []):
+            policies.append(BehaviorPolicy(
+                identifier=p["identifier"],
+                title=p["title"],
+                description=p.get("description", ""),
+                category=p.get("category", "interaction"),
+                policy_type=p.get("policy_type", "preferred"),
+                enabled=p.get("enabled", True),
+            ))
+        behavior = BehaviorModule(policies=tuple(policies))
+
+        comm_data = data.get("communication", {})
+        communication = CommunicationModule(
+            communication_style=comm_data.get("communication_style", ""),
+            tone=tuple(comm_data.get("tone", [])),
+            vocabulary_preferences=tuple(comm_data.get("vocabulary_preferences", [])),
+            response_tendencies=tuple(comm_data.get("response_tendencies", [])),
+            formatting_preferences=tuple(comm_data.get("formatting_preferences", [])),
+            reserved=comm_data.get("reserved", {}),
+        )
+
+        state_mods = {}
+        for state_id, mod_data in data.get("state_modulations", {}).items():
+            state_mods[state_id] = PersonaStateModulation(
+                voice_texture=tuple(mod_data.get("voice_texture", [])),
+                signature_phrasing=tuple(mod_data.get("signature_phrasing", [])),
+                preferred_moves=tuple(mod_data.get("preferred_moves", [])),
+                forbidden_moves=tuple(mod_data.get("forbidden_moves", [])),
+                lexical_bias=tuple(mod_data.get("lexical_bias", [])),
+                metaphor_bias=tuple(mod_data.get("metaphor_bias", [])),
+                humor_boundary=mod_data.get("humor_boundary"),
+                warmth_boundary=mod_data.get("warmth_boundary"),
+            )
+
+        status_val = data.get("status", "forged")
+        status = CartridgeStatus(status_val) if isinstance(status_val, str) else status_val
+
+        return cls(
+            manifest=manifest,
+            identity=identity,
+            character=character,
+            preferences=preferences,
+            behavior=behavior,
+            communication=communication,
+            state_modulations=state_mods,
+            extensions=dict(data.get("extensions", {})),
+            status=status,
+        )
+
     @staticmethod
     def schema() -> dict:
         return {

@@ -1,4 +1,4 @@
-"""Assignment 006: Cartridge Inspector — API and template tests."""
+﻿"""Assignment 006: Cartridge Inspector — API and template tests."""
 
 from __future__ import annotations
 
@@ -9,9 +9,14 @@ pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.identity.signing import sign_handshake, encode_handshake
 from app.interview.engine import InterviewEngine
 from app.services.authoring_workflow import AuthoringWorkflow
 from app.services.cartridge_service import CartridgeService, CartridgeNotFoundError
+
+def _auth_headers():
+    token = encode_handshake(sign_handshake("chimera-dev-secret", "test-user"))
+    return {"X-Identity-Handshake": token}
 
 
 @pytest.fixture(autouse=True)
@@ -29,7 +34,7 @@ def client():
 
 @pytest.fixture()
 def cartridge_id(client) -> str:
-    session = client.post("/api/sessions").json()["session_id"]
+    session = client.post("/api/sessions", headers=_auth_headers()).json()["session_id"]
     answers = [
         ("identity_name", "Inspector Test Persona"),
         ("identity_identifier", "inspector-test-persona"),
@@ -51,8 +56,8 @@ def cartridge_id(client) -> str:
     for qid, val in answers:
         client.post(f"/api/sessions/{session}/answers", json={
             "question_id": qid, "value": val
-        })
-    forge_resp = client.post(f"/api/sessions/{session}/forge")
+        }, headers=_auth_headers())
+    forge_resp = client.post(f"/api/sessions/{session}/forge", headers=_auth_headers())
     return forge_resp.json()["cartridge"]["manifest"]["cartridge_id"]
 
 
@@ -62,26 +67,26 @@ def cartridge_id(client) -> str:
 
 class TestGetCartridgeAPI:
     def test_returns_200(self, client, cartridge_id):
-        resp = client.get(f"/api/cartridges/{cartridge_id}")
+        resp = client.get(f"/api/cartridges/{cartridge_id}", headers=_auth_headers())
         assert resp.status_code == 200
 
     def test_returns_cartridge_dict(self, client, cartridge_id):
-        data = client.get(f"/api/cartridges/{cartridge_id}").json()
+        data = client.get(f"/api/cartridges/{cartridge_id}", headers=_auth_headers()).json()
         assert "cartridge" in data
         assert data["cartridge"]["manifest"]["cartridge_id"] == cartridge_id
 
     def test_returns_lifecycle(self, client, cartridge_id):
-        data = client.get(f"/api/cartridges/{cartridge_id}").json()
+        data = client.get(f"/api/cartridges/{cartridge_id}", headers=_auth_headers()).json()
         assert "lifecycle" in data
         assert data["lifecycle"]["state"] == "active"
 
     def test_returns_source(self, client, cartridge_id):
-        data = client.get(f"/api/cartridges/{cartridge_id}").json()
+        data = client.get(f"/api/cartridges/{cartridge_id}", headers=_auth_headers()).json()
         assert "source" in data
         assert "has_source" in data["source"]
 
     def test_404_for_unknown_uuid(self, client):
-        resp = client.get("/api/cartridges/00000000-0000-0000-0000-000000000000")
+        resp = client.get("/api/cartridges/00000000-0000-0000-0000-000000000000", headers=_auth_headers())
         assert resp.status_code == 404
 
 
@@ -91,21 +96,21 @@ class TestGetCartridgeAPI:
 
 class TestGetCartridgeValidationAPI:
     def test_returns_200(self, client, cartridge_id):
-        resp = client.get(f"/api/cartridges/{cartridge_id}/validation")
+        resp = client.get(f"/api/cartridges/{cartridge_id}/validation", headers=_auth_headers())
         assert resp.status_code == 200
 
     def test_valid_cartridge(self, client, cartridge_id):
-        data = client.get(f"/api/cartridges/{cartridge_id}/validation").json()
+        data = client.get(f"/api/cartridges/{cartridge_id}/validation", headers=_auth_headers()).json()
         assert "valid" in data
         assert "errors" in data
         assert "specification" in data
 
     def test_specification_compliance(self, client, cartridge_id):
-        data = client.get(f"/api/cartridges/{cartridge_id}/validation").json()
+        data = client.get(f"/api/cartridges/{cartridge_id}/validation", headers=_auth_headers()).json()
         assert data["specification"]["compliant"] is True
 
     def test_404_for_unknown(self, client):
-        resp = client.get("/api/cartridges/00000000-0000-0000-0000-000000000000/validation")
+        resp = client.get("/api/cartridges/00000000-0000-0000-0000-000000000000/validation", headers=_auth_headers())
         assert resp.status_code == 404
 
 
@@ -115,20 +120,20 @@ class TestGetCartridgeValidationAPI:
 
 class TestGetCartridgeVersionsAPI:
     def test_returns_200(self, client, cartridge_id):
-        resp = client.get(f"/api/cartridges/{cartridge_id}/versions")
+        resp = client.get(f"/api/cartridges/{cartridge_id}/versions", headers=_auth_headers())
         assert resp.status_code == 200
 
     def test_single_version(self, client, cartridge_id):
-        data = client.get(f"/api/cartridges/{cartridge_id}/versions").json()
+        data = client.get(f"/api/cartridges/{cartridge_id}/versions", headers=_auth_headers()).json()
         assert data["total_versions"] == 1
         assert data["versions"][0]["is_current"] is True
 
     def test_version_identifier(self, client, cartridge_id):
-        data = client.get(f"/api/cartridges/{cartridge_id}/versions").json()
+        data = client.get(f"/api/cartridges/{cartridge_id}/versions", headers=_auth_headers()).json()
         assert data["identifier"] == "inspector-test-persona"
 
     def test_404_for_unknown(self, client):
-        resp = client.get("/api/cartridges/00000000-0000-0000-0000-000000000000/versions")
+        resp = client.get("/api/cartridges/00000000-0000-0000-0000-000000000000/versions", headers=_auth_headers())
         assert resp.status_code == 404
 
 
@@ -138,11 +143,11 @@ class TestGetCartridgeVersionsAPI:
 
 class TestGetCartridgeSourceAPI:
     def test_returns_200(self, client, cartridge_id):
-        resp = client.get(f"/api/cartridges/{cartridge_id}/source")
+        resp = client.get(f"/api/cartridges/{cartridge_id}/source", headers=_auth_headers())
         assert resp.status_code == 200
 
     def test_source_has_fields(self, client, cartridge_id):
-        data = client.get(f"/api/cartridges/{cartridge_id}/source").json()
+        data = client.get(f"/api/cartridges/{cartridge_id}/source", headers=_auth_headers()).json()
         assert "cartridge_id" in data
         assert "identifier" in data
         assert "source_session_id" in data
@@ -150,12 +155,12 @@ class TestGetCartridgeSourceAPI:
         assert "has_source" in data
 
     def test_source_session_id_present(self, client, cartridge_id):
-        data = client.get(f"/api/cartridges/{cartridge_id}/source").json()
+        data = client.get(f"/api/cartridges/{cartridge_id}/source", headers=_auth_headers()).json()
         assert data["has_source"] is True
         assert data["source_session_id"] is not None
 
     def test_404_for_unknown(self, client):
-        resp = client.get("/api/cartridges/00000000-0000-0000-0000-000000000000/source")
+        resp = client.get("/api/cartridges/00000000-0000-0000-0000-000000000000/source", headers=_auth_headers())
         assert resp.status_code == 404
 
 
@@ -211,7 +216,7 @@ class TestInspectorTemplate:
 
 class TestVersionHistory:
     def test_two_forges_two_versions(self, client):
-        session = client.post("/api/sessions").json()["session_id"]
+        session = client.post("/api/sessions", headers=_auth_headers()).json()["session_id"]
         answers = [
             ("identity_name", "Versioned Persona"),
             ("identity_identifier", "versioned-persona"),
@@ -233,23 +238,23 @@ class TestVersionHistory:
         for qid, val in answers:
             client.post(f"/api/sessions/{session}/answers", json={
                 "question_id": qid, "value": val
-            })
-        r1 = client.post(f"/api/sessions/{session}/forge")
+            }, headers=_auth_headers())
+        r1 = client.post(f"/api/sessions/{session}/forge", headers=_auth_headers())
         assert r1.status_code == 200
         uuid1 = r1.json()["cartridge"]["manifest"]["cartridge_id"]
 
-        r2 = client.post(f"/api/sessions/{session}/forge")
+        r2 = client.post(f"/api/sessions/{session}/forge", headers=_auth_headers())
         assert r2.status_code == 200
         uuid2 = r2.json()["cartridge"]["manifest"]["cartridge_id"]
 
         assert uuid1 != uuid2
 
-        versions = client.get(f"/api/cartridges/{uuid1}/versions").json()
+        versions = client.get(f"/api/cartridges/{uuid1}/versions", headers=_auth_headers()).json()
         assert versions["total_versions"] == 2
         assert versions["versions"][0]["cartridge_id"] == uuid1
         assert versions["versions"][0]["is_current"] is False
         assert versions["versions"][1]["cartridge_id"] == uuid2
         assert versions["versions"][1]["is_current"] is True
 
-        v2 = client.get(f"/api/cartridges/{uuid2}/versions").json()
+        v2 = client.get(f"/api/cartridges/{uuid2}/versions", headers=_auth_headers()).json()
         assert v2["versions"][1]["is_current"] is True

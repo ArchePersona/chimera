@@ -19,6 +19,11 @@ from app.models.projection import RuntimePersonaProjection, RuntimeProjectionBui
 from app.services.archengine_export import export_archengine_payload
 from app.services.forge import CartridgeForge
 
+try:
+    from app.repositories.cartridge_repository import CartridgeRepository
+except ImportError:
+    CartridgeRepository = None  # type: ignore[assignment,misc]
+
 
 # ---------------------------------------------------------------------------
 # Lifecycle state — management status only, never affects persona behavior
@@ -106,12 +111,19 @@ class CartridgeService:
     runtime views to RuntimeProjectionBuilder, and ARCHEngine export
     to the export service.  Never contains forge logic, validation rules,
     projection logic, or ARCHEngine compatibility code.
+
+    Every public method requires an ``owner_user_id`` to enforce
+    user isolation.  When a CartridgeRepository is provided, all
+    persistence is delegated to it.  Otherwise, in-memory dicts
+    (keyed by owner_user_id + identifier) are used.
     """
 
-    def __init__(self) -> None:
-        self._store: dict[str, _CartridgeRecord] = {}
-        self._by_uuid: dict[str, str] = {}
-        self._history: dict[str, list[_CartridgeRecord]] = {}
+    def __init__(self, repo: "CartridgeRepository | None" = None) -> None:
+        self._repo = repo
+        # In-memory fallback (used when no repo is provided)
+        self._store: dict[tuple[str, str], _CartridgeRecord] = {}
+        self._by_uuid: dict[tuple[str, str], str] = {}
+        self._history: dict[tuple[str, str], list[_CartridgeRecord]] = {}
 
     # ------------------------------------------------------------------
     # Create
@@ -120,13 +132,12 @@ class CartridgeService:
     def create(
         self,
         draft: PersonaDraft,
+        owner_user_id: str,
         source_session_id: Optional[str] = None,
     ) -> ForgeResult:
         """Forge a new cartridge and register it in the lifecycle store.
 
         On success the cartridge is stored with lifecycle state Active.
-        Returns the same ForgeResult from CartridgeForge; the caller
-        inspects result.success and result.cartridge.
         """
         result = CartridgeForge.forge(draft)
         if result.success and result.cartridge is not None:
@@ -142,59 +153,75 @@ class CartridgeService:
             )
             identifier = result.cartridge.identity.identifier
             cartridge_id = result.cartridge.manifest.cartridge_id
-            self._store[identifier] = record
-            self._by_uuid[cartridge_id] = identifier
-            if identifier not in self._history:
-                self._history[identifier] = []
-            self._history[identifier].append(record)
+            if self._repo is not None:
+                self._repo.save(identifier, record, owner_user_id)
+            else:
+                self._store[(owner_user_id, identifier)] = record
+                self._by_uuid[(owner_user_id, cartridge_id)] = identifier
+                key = (owner_user_id, identifier)
+                if key not in self._history:
+                    self._history[key] = []
+                self._history[key].append(record)
         return result
 
     # ------------------------------------------------------------------
     # Retrieve
     # ------------------------------------------------------------------
 
-    def get(self, identifier: str) -> PersonaCartridge:
+    def get(self, identifier: str, owner_user_id: str) -> PersonaCartridge:
         """Retrieve a cartridge by its persona identifier.
 
         Raises CartridgeNotFoundError if the cartridge does not exist
         or has been logically deleted.
         """
-        record = self._get_record(identifier)
+        record = self._get_record(identifier, owner_user_id)
         if record.lifecycle.lifecycle_state == LifecycleState.DELETED:
             raise CartridgeNotFoundError(
                 f"Cartridge '{identifier}' is deleted"
             )
         return record.cartridge
 
-    def get_by_uuid(self, cartridge_id: str) -> PersonaCartridge:
-        """Retrieve a cartridge by its manifest UUID.
-
-        Raises CartridgeNotFoundError if the UUID is unknown.
-        """
-        if cartridge_id not in self._by_uuid:
+    def get_by_uuid(self, cartridge_id: str, owner_user_id: str) -> PersonaCartridge:
+        """Retrieve a cartridge by its manifest UUID."""
+        if self._repo is not None:
+            record = self._repo.get_by_uuid(cartridge_id, owner_user_id)
+        else:
+            identifier = self._by_uuid.get((owner_user_id, cartridge_id))
+            if identifier is None:
+                raise CartridgeNotFoundError(
+                    f"Cartridge with UUID '{cartridge_id}' not found"
+                )
+            record = self._get_record(identifier, owner_user_id)
+        if record.lifecycle.lifecycle_state == LifecycleState.DELETED:
             raise CartridgeNotFoundError(
-                f"Cartridge with UUID '{cartridge_id}' not found"
+                f"Cartridge with UUID '{cartridge_id}' is deleted"
             )
-        identifier = self._by_uuid[cartridge_id]
-        return self.get(identifier)
+        return record.cartridge
 
-    def get_lifecycle_metadata(self, identifier: str) -> CartridgeLifecycleMetadata:
+    def get_lifecycle_metadata(
+        self, identifier: str, owner_user_id: str
+    ) -> CartridgeLifecycleMetadata:
         """Retrieve lifecycle metadata for a cartridge (including deleted)."""
-        record = self._get_record(identifier)
+        record = self._get_record(identifier, owner_user_id)
         return copy.deepcopy(record.lifecycle)
 
-    def versions(self, identifier: str) -> list[dict]:
-        """Return all forged versions sharing the same persona identifier.
+    def versions(self, identifier: str, owner_user_id: str) -> list[dict]:
+        """Return all forged versions sharing the same persona identifier."""
+        if self._repo is not None:
+            records = self._repo.versions(identifier, owner_user_id)
+        else:
+            key = (owner_user_id, identifier)
+            records = self._history.get(key, [])
 
-        Each version entry includes the cartridge UUID, version info,
-        forge timestamp, specification version, and lifecycle state.
-        """
-        if identifier not in self._history:
-            return []
-        records = self._history[identifier]
-        current_id = self._store.get(identifier)
+        current_key = (owner_user_id, identifier)
+        current_rec = self._store.get(current_key) if self._repo is None else None
+        if self._repo is not None:
+            try:
+                current_rec = self._repo.get(identifier, owner_user_id)
+            except CartridgeNotFoundError:
+                current_rec = None
         current_cartridge_id = (
-            current_id.cartridge.manifest.cartridge_id if current_id else None
+            current_rec.cartridge.manifest.cartridge_id if current_rec else None
         )
         return [
             {
@@ -210,9 +237,9 @@ class CartridgeService:
             for r in records
         ]
 
-    def get_source_info(self, identifier: str) -> dict:
+    def get_source_info(self, identifier: str, owner_user_id: str) -> dict:
         """Return source relationship information for a cartridge."""
-        record = self._get_record(identifier)
+        record = self._get_record(identifier, owner_user_id)
         return {
             "cartridge_id": record.cartridge.manifest.cartridge_id,
             "identifier": identifier,
@@ -221,26 +248,40 @@ class CartridgeService:
             "has_source": record.lifecycle.source_session_id is not None,
         }
 
-    def get_source_info_by_uuid(self, cartridge_id: str) -> dict:
+    def get_source_info_by_uuid(self, cartridge_id: str, owner_user_id: str) -> dict:
         """Return source relationship information for a cartridge by UUID."""
-        if cartridge_id not in self._by_uuid:
-            raise CartridgeNotFoundError(
-                f"Cartridge with UUID '{cartridge_id}' not found"
-            )
-        identifier = self._by_uuid[cartridge_id]
-        return self.get_source_info(identifier)
+        if self._repo is not None:
+            record = self._repo.get_by_uuid(cartridge_id, owner_user_id)
+        else:
+            identifier = self._by_uuid.get((owner_user_id, cartridge_id))
+            if identifier is None:
+                raise CartridgeNotFoundError(
+                    f"Cartridge with UUID '{cartridge_id}' not found"
+                )
+            record = self._get_record(identifier, owner_user_id)
+        return {
+            "cartridge_id": record.cartridge.manifest.cartridge_id,
+            "identifier": record.cartridge.identity.identifier,
+            "source_session_id": record.lifecycle.source_session_id,
+            "forged_at": record.lifecycle.created_at.isoformat(),
+            "has_source": record.lifecycle.source_session_id is not None,
+        }
 
     def list(
         self,
+        owner_user_id: str,
         lifecycle_state: Optional[LifecycleState] = None,
         tag: Optional[str] = None,
     ) -> list[CartridgeSummary]:
-        """List cartridges, optionally filtered by state or tag.
-
-        Returns lightweight CartridgeSummary objects ordered by
-        creation time descending.
-        """
-        records = list(self._store.values())
+        """List cartridges for a user, optionally filtered by state or tag."""
+        if self._repo is not None:
+            pairs = self._repo.list_all(owner_user_id)
+            records = [r for _, r in pairs]
+        else:
+            records = [
+                r for (uid, _), r in self._store.items()
+                if uid == owner_user_id
+            ]
         if lifecycle_state is not None:
             records = [r for r in records if r.lifecycle.lifecycle_state == lifecycle_state]
         if tag is not None:
@@ -265,36 +306,30 @@ class CartridgeService:
     def update_metadata(
         self,
         identifier: str,
+        owner_user_id: str,
         tags: Optional[list[str]] = None,
         notes: Optional[str] = None,
     ) -> CartridgeLifecycleMetadata:
-        """Update mutable lifecycle metadata (tags, notes).
-
-        Never modifies authored persona content.
-        Never modifies cartridge manifest (cartridge_id, schema version,
-        timestamps).
-        """
-        record = self._get_record(identifier)
+        """Update mutable lifecycle metadata (tags, notes)."""
+        record = self._get_record(identifier, owner_user_id)
         if tags is not None:
             record.lifecycle.tags = list(tags)
         if notes is not None:
             record.lifecycle.notes = notes
         record.lifecycle.updated_at = datetime.now(timezone.utc)
+        if self._repo is not None:
+            self._repo.persist_current(identifier, owner_user_id)
         return copy.deepcopy(record.lifecycle)
 
     # ------------------------------------------------------------------
     # Clone
     # ------------------------------------------------------------------
 
-    def clone(self, source_identifier: str, new_identifier: str) -> ForgeResult:
-        """Clone an existing cartridge with a new persona identifier.
-
-        The clone preserves all authored content, schema version, and
-        records clone provenance.  Lifecycle timestamps are reset for
-        the new cartridge.  Returns a new ForgeResult with the cloned
-        cartridge.
-        """
-        source = self.get(source_identifier)
+    def clone(
+        self, source_identifier: str, new_identifier: str, owner_user_id: str
+    ) -> ForgeResult:
+        """Clone an existing cartridge with a new persona identifier."""
+        source = self.get(source_identifier, owner_user_id)
         draft = PersonaDraft(
             name=source.identity.display_name,
             identifier=new_identifier,
@@ -327,22 +362,26 @@ class CartridgeService:
                     clone_source=source.manifest.cartridge_id,
                 ),
             )
-            new_identifier = result.cartridge.identity.identifier
+            new_id = result.cartridge.identity.identifier
             new_uuid = result.cartridge.manifest.cartridge_id
-            self._store[new_identifier] = record
-            self._by_uuid[new_uuid] = new_identifier
-            if new_identifier not in self._history:
-                self._history[new_identifier] = []
-            self._history[new_identifier].append(record)
+            if self._repo is not None:
+                self._repo.save(new_id, record, owner_user_id)
+            else:
+                self._store[(owner_user_id, new_id)] = record
+                self._by_uuid[(owner_user_id, new_uuid)] = new_id
+                key = (owner_user_id, new_id)
+                if key not in self._history:
+                    self._history[key] = []
+                self._history[key].append(record)
         return result
 
     # ------------------------------------------------------------------
     # Archive / Restore
     # ------------------------------------------------------------------
 
-    def archive(self, identifier: str) -> None:
+    def archive(self, identifier: str, owner_user_id: str) -> None:
         """Transition a cartridge from Active to Archived."""
-        record = self._get_record(identifier)
+        record = self._get_record(identifier, owner_user_id)
         if record.lifecycle.lifecycle_state != LifecycleState.ACTIVE:
             raise LifecycleTransitionError(
                 f"Cannot archive cartridge '{identifier}': "
@@ -351,10 +390,12 @@ class CartridgeService:
         record.lifecycle.lifecycle_state = LifecycleState.ARCHIVED
         record.lifecycle.archived_at = datetime.now(timezone.utc)
         record.lifecycle.updated_at = datetime.now(timezone.utc)
+        if self._repo is not None:
+            self._repo.persist_current(identifier, owner_user_id)
 
-    def restore(self, identifier: str) -> None:
+    def restore(self, identifier: str, owner_user_id: str) -> None:
         """Transition a cartridge from Archived back to Active."""
-        record = self._get_record(identifier)
+        record = self._get_record(identifier, owner_user_id)
         if record.lifecycle.lifecycle_state != LifecycleState.ARCHIVED:
             raise LifecycleTransitionError(
                 f"Cannot restore cartridge '{identifier}': "
@@ -363,86 +404,87 @@ class CartridgeService:
         record.lifecycle.lifecycle_state = LifecycleState.ACTIVE
         record.lifecycle.archived_at = None
         record.lifecycle.updated_at = datetime.now(timezone.utc)
+        if self._repo is not None:
+            self._repo.persist_current(identifier, owner_user_id)
 
     # ------------------------------------------------------------------
     # Logical delete
     # ------------------------------------------------------------------
 
-    def delete(self, identifier: str) -> None:
-        """Logically delete a cartridge.  The record is retained.
-
-        Deleted cartridges cannot be retrieved via get() but remain
-        in the store for administrative/audit access.
-        """
-        record = self._get_record(identifier)
+    def delete(self, identifier: str, owner_user_id: str) -> None:
+        """Logically delete a cartridge."""
+        record = self._get_record(identifier, owner_user_id)
         if record.lifecycle.lifecycle_state == LifecycleState.DELETED:
             raise LifecycleTransitionError(
                 f"Cannot delete cartridge '{identifier}': already deleted"
             )
         record.lifecycle.lifecycle_state = LifecycleState.DELETED
         record.lifecycle.updated_at = datetime.now(timezone.utc)
+        if self._repo is not None:
+            self._repo.persist_current(identifier, owner_user_id)
 
     # ------------------------------------------------------------------
     # Runtime projection
     # ------------------------------------------------------------------
 
-    def runtime_projection(self, identifier: str) -> RuntimePersonaProjection:
-        """Produce an immutable runtime view of the cartridge.
-
-        Delegates to RuntimeProjectionBuilder.
-        The projection owns no authored data.
-        """
-        cartridge = self.get(identifier)
+    def runtime_projection(
+        self, identifier: str, owner_user_id: str
+    ) -> RuntimePersonaProjection:
+        """Produce an immutable runtime view of the cartridge."""
+        cartridge = self.get(identifier, owner_user_id)
         return RuntimeProjectionBuilder.build(cartridge)
 
     # ------------------------------------------------------------------
     # Export
     # ------------------------------------------------------------------
 
-    def export_archengine(self, identifier: str) -> CartridgeDescriptorPayload:
-        """Export a cartridge to an ARCHEngine-compatible payload.
-
-        Delegates to the existing export service.
-        Never constructs compatibility payloads directly.
-        Tracks export count in lifecycle metadata.
-        """
-        cartridge = self.get(identifier)
+    def export_archengine(
+        self, identifier: str, owner_user_id: str
+    ) -> CartridgeDescriptorPayload:
+        """Export a cartridge to an ARCHEngine-compatible payload."""
+        cartridge = self.get(identifier, owner_user_id)
         payload = export_archengine_payload(cartridge)
-        record = self._get_record(identifier)
+        record = self._get_record(identifier, owner_user_id)
         record.lifecycle.export_count += 1
         record.lifecycle.updated_at = datetime.now(timezone.utc)
+        if self._repo is not None:
+            self._repo.persist_current(identifier, owner_user_id)
         return payload
 
-    def export_canonical(self, identifier: str) -> dict:
-        """Export the canonical serialized cartridge and track the export.
-
-        Returns the dict produced by CartridgeSerializer.serialize.
-        Increments export count in lifecycle metadata.
-        """
+    def export_canonical(self, identifier: str, owner_user_id: str) -> dict:
+        """Export the canonical serialized cartridge and track the export."""
         from app.services.serializer import CartridgeSerializer
-        cartridge = self.get(identifier)
+        cartridge = self.get(identifier, owner_user_id)
         serialized = CartridgeSerializer.serialize(cartridge)
-        record = self._get_record(identifier)
+        record = self._get_record(identifier, owner_user_id)
         record.lifecycle.export_count += 1
         record.lifecycle.updated_at = datetime.now(timezone.utc)
+        if self._repo is not None:
+            self._repo.persist_current(identifier, owner_user_id)
         return serialized
 
-    def export_canonical_by_uuid(self, cartridge_id: str) -> dict:
+    def export_canonical_by_uuid(self, cartridge_id: str, owner_user_id: str) -> dict:
         """Export the canonical serialized cartridge by UUID."""
-        if cartridge_id not in self._by_uuid:
-            raise CartridgeNotFoundError(
-                f"Cartridge with UUID '{cartridge_id}' not found"
-            )
-        identifier = self._by_uuid[cartridge_id]
-        return self.export_canonical(identifier)
+        if self._repo is not None:
+            identifier = self._repo.get_by_uuid(cartridge_id, owner_user_id).identity.identifier
+        else:
+            identifier = self._by_uuid.get((owner_user_id, cartridge_id))
+            if identifier is None:
+                raise CartridgeNotFoundError(
+                    f"Cartridge with UUID '{cartridge_id}' not found"
+                )
+        return self.export_canonical(identifier, owner_user_id)
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _get_record(self, identifier: str) -> _CartridgeRecord:
-        if identifier not in self._store:
+    def _get_record(self, identifier: str, owner_user_id: str) -> _CartridgeRecord:
+        if self._repo is not None:
+            return self._repo.get(identifier, owner_user_id)
+        key = (owner_user_id, identifier)
+        if key not in self._store:
             raise CartridgeNotFoundError(
                 f"Cartridge '{identifier}' not found"
             )
-        return self._store[identifier]
+        return self._store[key]

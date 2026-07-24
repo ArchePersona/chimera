@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from app.identity.contract import UserContext
+from app.identity.dependencies import get_current_user
 from app.interview.engine import InterviewEngine
 from app.interview.exceptions import (
     InterviewError,
@@ -167,13 +169,13 @@ async def cartridge_schema():
 # ---------------------------------------------------------------------------
 
 @router.post("/sessions")
-async def create_session(request: Request, body: CreateSessionBody = CreateSessionBody()):
+async def create_session(request: Request, user: UserContext = Depends(get_current_user), body: CreateSessionBody = CreateSessionBody()):
     workflow = _get_workflow(request)
     template = None
     if body.template:
         template = PersonaDraft(**body.template)
-    session = workflow.create_session(template=template)
-    prog = workflow.progress(session.session_id)
+    session = workflow.create_session(user.user_id, template=template)
+    prog = workflow.progress(session.session_id, user.user_id)
     return {
         "session_id": session.session_id,
         "state": session.state.value,
@@ -182,14 +184,14 @@ async def create_session(request: Request, body: CreateSessionBody = CreateSessi
 
 
 @router.get("/sessions/{session_id}")
-async def get_session(request: Request, session_id: str):
+async def get_session(request: Request, session_id: str, user: UserContext = Depends(get_current_user)):
     workflow = _get_workflow(request)
     try:
-        session = workflow.load_session(session_id)
+        session = workflow.load_session(session_id, user.user_id)
     except SessionNotFound:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
-    prog = workflow.progress(session_id)
-    readiness = workflow.readiness(session_id)
+    prog = workflow.progress(session_id, user.user_id)
+    readiness = workflow.readiness(session_id, user.user_id)
     return {
         "session_id": session.session_id,
         "state": session.state.value,
@@ -207,13 +209,13 @@ async def get_session(request: Request, session_id: str):
 # ---------------------------------------------------------------------------
 
 @router.get("/sessions/{session_id}/questions")
-async def get_questions(request: Request, session_id: str):
+async def get_questions(request: Request, session_id: str, user: UserContext = Depends(get_current_user)):
     workflow = _get_workflow(request)
     try:
-        questions = workflow.available_questions(session_id)
+        questions = workflow.available_questions(session_id, user.user_id)
     except SessionNotFound:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
-    current = workflow.current_question(session_id)
+    current = workflow.current_question(session_id, user.user_id)
     return {
         "available": [_serialize_question(q) for q in questions],
         "current": _serialize_question(current) if current else None,
@@ -221,20 +223,20 @@ async def get_questions(request: Request, session_id: str):
 
 
 @router.get("/sessions/{session_id}/progress")
-async def get_progress(request: Request, session_id: str):
+async def get_progress(request: Request, session_id: str, user: UserContext = Depends(get_current_user)):
     workflow = _get_workflow(request)
     try:
-        prog = workflow.progress(session_id)
+        prog = workflow.progress(session_id, user.user_id)
     except SessionNotFound:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
     return _serialize_progress(prog)
 
 
 @router.post("/sessions/{session_id}/answers")
-async def submit_answer(request: Request, session_id: str, body: AnswerBody):
+async def submit_answer(request: Request, session_id: str, body: AnswerBody, user: UserContext = Depends(get_current_user)):
     workflow = _get_workflow(request)
     try:
-        answer = workflow.answer_question(session_id, body.question_id, body.value)
+        answer = workflow.answer_question(session_id, body.question_id, body.value, user.user_id)
     except SessionNotFound:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
     except QuestionNotAvailableError as exc:
@@ -248,8 +250,8 @@ async def submit_answer(request: Request, session_id: str, body: AnswerBody):
     except InterviewStateError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
 
-    prog = workflow.progress(session_id)
-    readiness = workflow.readiness(session_id)
+    prog = workflow.progress(session_id, user.user_id)
+    readiness = workflow.readiness(session_id, user.user_id)
     return {
         "accepted": True,
         "question_id": answer.question_id,
@@ -260,10 +262,10 @@ async def submit_answer(request: Request, session_id: str, body: AnswerBody):
 
 
 @router.post("/sessions/{session_id}/skip")
-async def skip_question(request: Request, session_id: str, body: SkipBody):
+async def skip_question(request: Request, session_id: str, body: SkipBody, user: UserContext = Depends(get_current_user)):
     workflow = _get_workflow(request)
     try:
-        workflow.skip_question(session_id, body.question_id)
+        workflow.skip_question(session_id, body.question_id, user.user_id)
     except SessionNotFound:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
     except QuestionNotAvailableError as exc:
@@ -271,8 +273,8 @@ async def skip_question(request: Request, session_id: str, body: SkipBody):
     except InterviewError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    prog = workflow.progress(session_id)
-    readiness = workflow.readiness(session_id)
+    prog = workflow.progress(session_id, user.user_id)
+    readiness = workflow.readiness(session_id, user.user_id)
     return {
         "accepted": True,
         "question_id": body.question_id,
@@ -283,10 +285,10 @@ async def skip_question(request: Request, session_id: str, body: SkipBody):
 
 
 @router.post("/sessions/{session_id}/complete")
-async def complete_session(request: Request, session_id: str):
+async def complete_session(request: Request, session_id: str, user: UserContext = Depends(get_current_user)):
     workflow = _get_workflow(request)
     try:
-        workflow.complete_session(session_id)
+        workflow.complete_session(session_id, user.user_id)
     except SessionNotFound:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
     except InterviewStateError as exc:
@@ -299,16 +301,16 @@ async def complete_session(request: Request, session_id: str):
 # ---------------------------------------------------------------------------
 
 @router.get("/sessions/{session_id}/draft")
-async def get_draft(request: Request, session_id: str):
+async def get_draft(request: Request, session_id: str, user: UserContext = Depends(get_current_user)):
     workflow = _get_workflow(request)
     try:
-        session = workflow.load_session(session_id)
+        session = workflow.load_session(session_id, user.user_id)
     except SessionNotFound:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
 
     draft = session.draft
-    prog = workflow.progress(session_id)
-    readiness = workflow.readiness(session_id)
+    prog = workflow.progress(session_id, user.user_id)
+    readiness = workflow.readiness(session_id, user.user_id)
     return {
         "session_id": session_id,
         "state": session.state.value,
@@ -339,10 +341,10 @@ async def get_draft(request: Request, session_id: str):
 
 
 @router.post("/sessions/{session_id}/validate")
-async def validate_session_draft(request: Request, session_id: str):
+async def validate_session_draft(request: Request, session_id: str, user: UserContext = Depends(get_current_user)):
     workflow = _get_workflow(request)
     try:
-        session = workflow.load_session(session_id)
+        session = workflow.load_session(session_id, user.user_id)
     except SessionNotFound:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
 
@@ -358,10 +360,10 @@ async def validate_session_draft(request: Request, session_id: str):
 
 
 @router.post("/sessions/{session_id}/forge")
-async def forge_session_draft(request: Request, session_id: str):
+async def forge_session_draft(request: Request, session_id: str, user: UserContext = Depends(get_current_user)):
     workflow = _get_workflow(request)
     try:
-        result = workflow.forge(session_id)
+        result = workflow.forge(session_id, user.user_id)
     except SessionNotFound:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
     except InterviewIncomplete as exc:
@@ -405,16 +407,16 @@ async def forge_session_draft(request: Request, session_id: str):
 # ---------------------------------------------------------------------------
 
 @router.get("/cartridges/{cartridge_id}")
-async def get_cartridge(request: Request, cartridge_id: str):
+async def get_cartridge(request: Request, cartridge_id: str, user: UserContext = Depends(get_current_user)):
     workflow = _get_workflow(request)
     cartridge_service = workflow.cartridge_service
     try:
-        cartridge = cartridge_service.get_by_uuid(cartridge_id)
+        cartridge = cartridge_service.get_by_uuid(cartridge_id, user.user_id)
     except CartridgeNotFoundError:
         raise HTTPException(status_code=404, detail=f"Cartridge '{cartridge_id}' not found")
     identifier = cartridge.identity.identifier
-    lifecycle = cartridge_service.get_lifecycle_metadata(identifier)
-    source = cartridge_service.get_source_info(identifier)
+    lifecycle = cartridge_service.get_lifecycle_metadata(identifier, user.user_id)
+    source = cartridge_service.get_source_info(identifier, user.user_id)
     return {
         "cartridge": cartridge.to_dict(),
         "lifecycle": {
@@ -431,11 +433,11 @@ async def get_cartridge(request: Request, cartridge_id: str):
 
 
 @router.get("/cartridges/{cartridge_id}/validation")
-async def get_cartridge_validation(request: Request, cartridge_id: str):
+async def get_cartridge_validation(request: Request, cartridge_id: str, user: UserContext = Depends(get_current_user)):
     workflow = _get_workflow(request)
     cartridge_service = workflow.cartridge_service
     try:
-        cartridge = cartridge_service.get_by_uuid(cartridge_id)
+        cartridge = cartridge_service.get_by_uuid(cartridge_id, user.user_id)
     except CartridgeNotFoundError:
         raise HTTPException(status_code=404, detail=f"Cartridge '{cartridge_id}' not found")
     validation_result, spec_validation = CartridgeForge.validate_cartridge(cartridge)
@@ -451,15 +453,15 @@ async def get_cartridge_validation(request: Request, cartridge_id: str):
 
 
 @router.get("/cartridges/{cartridge_id}/versions")
-async def get_cartridge_versions(request: Request, cartridge_id: str):
+async def get_cartridge_versions(request: Request, cartridge_id: str, user: UserContext = Depends(get_current_user)):
     workflow = _get_workflow(request)
     cartridge_service = workflow.cartridge_service
     try:
-        cartridge = cartridge_service.get_by_uuid(cartridge_id)
+        cartridge = cartridge_service.get_by_uuid(cartridge_id, user.user_id)
     except CartridgeNotFoundError:
         raise HTTPException(status_code=404, detail=f"Cartridge '{cartridge_id}' not found")
     identifier = cartridge.identity.identifier
-    versions = cartridge_service.versions(identifier)
+    versions = cartridge_service.versions(identifier, user.user_id)
     return {
         "identifier": identifier,
         "current_version_id": cartridge_id,
@@ -469,11 +471,11 @@ async def get_cartridge_versions(request: Request, cartridge_id: str):
 
 
 @router.get("/cartridges/{cartridge_id}/source")
-async def get_cartridge_source(request: Request, cartridge_id: str):
+async def get_cartridge_source(request: Request, cartridge_id: str, user: UserContext = Depends(get_current_user)):
     workflow = _get_workflow(request)
     cartridge_service = workflow.cartridge_service
     try:
-        source = cartridge_service.get_source_info_by_uuid(cartridge_id)
+        source = cartridge_service.get_source_info_by_uuid(cartridge_id, user.user_id)
     except CartridgeNotFoundError:
         raise HTTPException(status_code=404, detail=f"Cartridge '{cartridge_id}' not found")
     return source
@@ -484,15 +486,15 @@ async def get_cartridge_source(request: Request, cartridge_id: str):
 # ---------------------------------------------------------------------------
 
 @router.get("/cartridges/{cartridge_id}/export")
-async def export_cartridge(request: Request, cartridge_id: str):
+async def export_cartridge(request: Request, cartridge_id: str, user: UserContext = Depends(get_current_user)):
     workflow = _get_workflow(request)
     cartridge_service = workflow.cartridge_service
     try:
-        cartridge = cartridge_service.get_by_uuid(cartridge_id)
+        cartridge = cartridge_service.get_by_uuid(cartridge_id, user.user_id)
     except CartridgeNotFoundError:
         raise HTTPException(status_code=404, detail=f"Cartridge '{cartridge_id}' not found")
 
-    serialized = cartridge_service.export_canonical_by_uuid(cartridge_id)
+    serialized = cartridge_service.export_canonical_by_uuid(cartridge_id, user.user_id)
     validation_result, spec_validation = CartridgeForge.validate_cartridge(cartridge)
     compatibility = get_specification_compatibility_report(cartridge)
 
@@ -522,6 +524,6 @@ async def export_cartridge(request: Request, cartridge_id: str):
         "specification": spec_validation,
         "compatibility": compatibility,
         "lifecycle": {
-            "export_count": cartridge_service.get_lifecycle_metadata(identifier).export_count,
+            "export_count": cartridge_service.get_lifecycle_metadata(identifier, user.user_id).export_count,
         },
     }
