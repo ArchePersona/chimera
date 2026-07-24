@@ -1,6 +1,9 @@
 """Tests for Studio Assignment 001 — Application Shell and Route Foundation."""
 
 import pytest
+
+pytest.importorskip("fastapi")
+
 from fastapi.testclient import TestClient
 
 from app.main import app

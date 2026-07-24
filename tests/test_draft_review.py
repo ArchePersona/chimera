@@ -1,6 +1,9 @@
 """Tests for Assignment 004 — Interview API, Draft Review, and Forge Pipeline."""
 
 import pytest
+
+pytest.importorskip("fastapi")
+
 from fastapi.testclient import TestClient
 
 from app.main import app
