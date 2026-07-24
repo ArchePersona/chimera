@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -24,6 +25,7 @@ from app.services.authoring_workflow import (
 )
 from app.services.cartridge_service import CartridgeNotFoundError, LifecycleState
 from app.services.forge import CartridgeForge
+from app.specification.compatibility import get_specification_compatibility_report
 
 router = APIRouter(prefix="/api")
 
@@ -475,3 +477,51 @@ async def get_cartridge_source(request: Request, cartridge_id: str):
     except CartridgeNotFoundError:
         raise HTTPException(status_code=404, detail=f"Cartridge '{cartridge_id}' not found")
     return source
+
+
+# ---------------------------------------------------------------------------
+# Export
+# ---------------------------------------------------------------------------
+
+@router.get("/cartridges/{cartridge_id}/export")
+async def export_cartridge(request: Request, cartridge_id: str):
+    workflow = _get_workflow(request)
+    cartridge_service = workflow.cartridge_service
+    try:
+        cartridge = cartridge_service.get_by_uuid(cartridge_id)
+    except CartridgeNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Cartridge '{cartridge_id}' not found")
+
+    serialized = cartridge_service.export_canonical_by_uuid(cartridge_id)
+    validation_result, spec_validation = CartridgeForge.validate_cartridge(cartridge)
+    compatibility = get_specification_compatibility_report(cartridge)
+
+    serialized_json = json.dumps(serialized, indent=2, sort_keys=False)
+    import hashlib
+    checksum = hashlib.sha256(serialized_json.encode("utf-8")).hexdigest()
+    size_bytes = len(serialized_json.encode("utf-8"))
+
+    identifier = cartridge.identity.identifier
+    version = cartridge.manifest.schema_version
+    filename = f"{identifier}_v{version}.json"
+
+    return {
+        "cartridge": serialized,
+        "filename": filename,
+        "checksum": {"algorithm": "sha256", "value": checksum},
+        "size_bytes": size_bytes,
+        "format": "json",
+        "validation": {
+            "valid": validation_result.valid,
+            "warning_count": len(validation_result.warnings),
+            "errors": [
+                {"code": e.code.value, "field": e.field, "message": e.message}
+                for e in validation_result.errors
+            ],
+        },
+        "specification": spec_validation,
+        "compatibility": compatibility,
+        "lifecycle": {
+            "export_count": cartridge_service.get_lifecycle_metadata(identifier).export_count,
+        },
+    }

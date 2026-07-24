@@ -68,6 +68,17 @@ async def cartridge_inspector(request: Request, cartridge_id: str):
     )
 
 
+@router.get("/cartridges/{cartridge_id}/export", response_class=HTMLResponse)
+async def cartridge_export(request: Request, cartridge_id: str):
+    """Export experience for a forged Persona Cartridge."""
+    return render(
+        "studio/export.html",
+        request=request,
+        cartridge_id=cartridge_id,
+        current_route=f"/cartridges/{cartridge_id}/export",
+    )
+
+
 @router.get("/how-it-works", response_class=HTMLResponse)
 async def how_it_works(request: Request):
     """Informational overview of CHIMERA architecture and workflow."""

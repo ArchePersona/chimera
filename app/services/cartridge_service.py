@@ -413,6 +413,29 @@ class CartridgeService:
         record.lifecycle.updated_at = datetime.now(timezone.utc)
         return payload
 
+    def export_canonical(self, identifier: str) -> dict:
+        """Export the canonical serialized cartridge and track the export.
+
+        Returns the dict produced by CartridgeSerializer.serialize.
+        Increments export count in lifecycle metadata.
+        """
+        from app.services.serializer import CartridgeSerializer
+        cartridge = self.get(identifier)
+        serialized = CartridgeSerializer.serialize(cartridge)
+        record = self._get_record(identifier)
+        record.lifecycle.export_count += 1
+        record.lifecycle.updated_at = datetime.now(timezone.utc)
+        return serialized
+
+    def export_canonical_by_uuid(self, cartridge_id: str) -> dict:
+        """Export the canonical serialized cartridge by UUID."""
+        if cartridge_id not in self._by_uuid:
+            raise CartridgeNotFoundError(
+                f"Cartridge with UUID '{cartridge_id}' not found"
+            )
+        identifier = self._by_uuid[cartridge_id]
+        return self.export_canonical(identifier)
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

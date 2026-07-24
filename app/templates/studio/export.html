@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Export Cartridge — CHIMERA Studio</title>
+    <link rel="stylesheet" href="{{ base_path }}/static/css/style.css">
+</head>
+<body>
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    <header class="studio-header" role="banner">
+        <div class="header-inner">
+            <a href="{{ base_path }}/" class="logo-link">
+                <span class="logo-mark" aria-hidden="true">&#9670;</span>
+                <span class="logo-text">CHIMERA <span class="logo-sub">STUDIO</span></span>
+            </a>
+            <nav class="main-nav" role="navigation" aria-label="Main navigation">
+                <ul class="nav-list">
+                    <li><a href="{{ base_path }}/" class="nav-link">Dashboard</a></li>
+                    <li><a href="{{ base_path }}/cartridges/new" class="nav-link">New Persona</a></li>
+                    <li><a href="{{ base_path }}/how-it-works" class="nav-link">How It Works</a></li>
+                </ul>
+            </nav>
+        </div>
+    </header>
+
+    <main id="main-content" class="studio-main" role="main">
+        <div class="export-container" data-cartridge-id="{{ cartridge_id }}">
+            <div class="export-loading" id="export-loading">
+                <div class="loading-spinner" aria-hidden="true"></div>
+                <p>Preparing export…</p>
+            </div>
+
+            <div class="export-error hidden" id="export-error">
+                <div class="error-card">
+                    <h2>Export Unavailable</h2>
+                    <p id="error-message">The requested cartridge could not be exported.</p>
+                    <a href="{{ base_path }}/" class="btn btn-primary">Return to Dashboard</a>
+                </div>
+            </div>
+
+            <div class="export-content hidden" id="export-content">
+                <section class="export-header" aria-label="Export header">
+                    <div class="export-header-top">
+                        <a href="{{ base_path }}/cartridges/{CARTRIDGE_ID}" class="back-link export-inspector-link">&larr; Inspector</a>
+                    </div>
+                    <div class="export-header-main">
+                        <div class="export-header-info">
+                            <h1>Export Cartridge</h1>
+                            <div class="header-meta">
+                                <code class="cartridge-id" id="export-cartridge-id">—</code>
+                                <span class="export-format-badge">JSON</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <div class="export-layout">
+                    <section class="export-sidebar" aria-label="Export metadata">
+                        <div class="export-meta-card">
+                            <h2>Artifact</h2>
+                            <dl class="export-meta-list">
+                                <dt>Name</dt><dd id="meta-name">—</dd>
+                                <dt>Identifier</dt><dd class="mono" id="meta-identifier">—</dd>
+                                <dt>Cartridge UUID</dt><dd class="mono" id="meta-uuid">—</dd>
+                                <dt>Schema Version</dt><dd id="meta-version">—</dd>
+                                <dt>Specification</dt><dd id="meta-spec">—</dd>
+                                <dt>Forged</dt><dd id="meta-forged">—</dd>
+                            </dl>
+                        </div>
+
+                        <div class="export-meta-card">
+                            <h2>Export Summary</h2>
+                            <dl class="export-meta-list">
+                                <dt>Format</dt><dd>JSON</dd>
+                                <dt>Serialized Size</dt><dd id="meta-size">—</dd>
+                                <dt>Checksum</dt><dd class="mono" id="meta-checksum">—</dd>
+                                <dt>Export Count</dt><dd id="meta-export-count">—</dd>
+                            </dl>
+                        </div>
+
+                        <div class="export-meta-card">
+                            <h2>Validation</h2>
+                            <div id="export-validation-status"></div>
+                        </div>
+
+                        <div class="export-meta-card">
+                            <h2>Runtime Compatibility</h2>
+                            <div class="compat-runtime" id="export-compatibility">
+                                <div class="compat-item">
+                                    <span class="compat-check" aria-hidden="true">&#10003;</span>
+                                    <span>ARCHEngine</span>
+                                </div>
+                            </div>
+                            <dl class="export-meta-list export-spec-info">
+                                <dt>Specification</dt><dd id="compat-spec">—</dd>
+                            </dl>
+                        </div>
+
+                        <div class="export-actions">
+                            <button class="btn btn-primary btn-export-download" id="btn-download" aria-label="Download JSON file">
+                                Export JSON
+                            </button>
+                            <button class="btn btn-secondary" id="btn-copy" aria-label="Copy JSON to clipboard">
+                                Copy JSON
+                            </button>
+                        </div>
+
+                        <div class="export-nav-links">
+                            <a href="{{ base_path }}/cartridges/{CARTRIDGE_ID}" class="export-nav-link export-inspector-link">Return to Inspector</a>
+                            <a href="{{ base_path }}/" class="export-nav-link">Dashboard</a>
+                        </div>
+                    </section>
+
+                    <section class="export-preview" aria-label="JSON preview">
+                        <div class="export-preview-header">
+                            <h2>JSON Preview</h2>
+                            <div class="export-preview-actions">
+                                <button class="btn btn-sm" id="btn-copy-preview">Copy</button>
+                            </div>
+                        </div>
+                        <pre class="export-json-preview" id="json-preview"><code id="json-code"></code></pre>
+                    </section>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="studio-footer" role="contentinfo">
+        <div class="footer-inner">
+            <span class="footer-brand">CHIMERA Studio</span>
+            <span class="footer-sep">&middot;</span>
+            <span class="footer-version">Export Experience</span>
+        </div>
+    </footer>
+
+    <div class="sr-only" aria-live="polite" id="sr-announcer"></div>
+    <div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+    <script src="{{ base_path }}/static/js/export.js"></script>
+</body>
+</html>
