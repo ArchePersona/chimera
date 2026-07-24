@@ -359,6 +359,7 @@ async def validate_session_draft(request: Request, session_id: str):
 
 @router.post("/sessions/{session_id}/forge")
 async def forge_session_draft(request: Request, session_id: str):
+    import traceback as _tb
     workflow = _get_workflow(request)
     try:
         result = workflow.forge(session_id)
@@ -379,6 +380,13 @@ async def forge_session_draft(request: Request, session_id: str):
             "error": "CARTRIDGE_CREATION_FAILED",
             "message": str(exc),
             "detail": exc.detail,
+        })
+    except Exception as exc:
+        _tb.print_exc()
+        raise HTTPException(status_code=500, detail={
+            "error": "FORGE_FAILED",
+            "message": str(exc),
+            "type": type(exc).__name__,
         })
 
     if result.success:
